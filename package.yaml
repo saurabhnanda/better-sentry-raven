@@ -1,0 +1,66 @@
+name:                better-sentry-raven
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/saurabhnanda/better-sentry-raven#readme
+license:             BSD3
+author:              Saurabh Nanda
+maintainer:          saurabhnanda@gmail.com
+copyright:           Saurabh Nanda
+category:            Web
+extra-source-files:
+- README.md
+
+dependencies:
+  - base >= 4.7 && < 5
+  - text
+  - bytestring
+  - http-client
+  - http-client-tls
+  - http-types
+  - aeson
+  - aeson-casing
+  - string-conv
+  - time
+  - hostname
+  - exceptions
+  - uuid
+  - monad-logger
+  - uri-bytestring
+  - microlens
+  - safe
+  - containers
+  - microlens-aeson
+
+ghc-options:
+  - -Wall 
+  - -fno-warn-orphans 
+  - -fno-warn-unused-imports 
+  - -fno-warn-dodgy-exports 
+  - -Werror=missing-fields
+  - -Werror=incomplete-patterns
+
+executables:
+  better-sentry-raven:
+    source-dirs:      src
+    main:             Main.hs
+
+tests:
+  test:
+    ghc-options:
+      - -threaded
+      - -with-rtsopts=-N
+    main: Test
+    source-dirs:
+      - src
+      - test
+    dependencies:
+      - hedgehog
+      - tasty
+      - tasty-discover
+      - tasty-hunit
+      - tasty-hedgehog
+      - random
+      - unliftio
+      - hedgehog-gen
+      - retry

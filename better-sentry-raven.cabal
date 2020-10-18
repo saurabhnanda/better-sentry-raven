@@ -1,0 +1,94 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 98009961b1edc20e7dfdd82dc123633ae7fbb4af46cac335ab58fc6635c76b07
+
+name:           better-sentry-raven
+version:        0.1.0.0
+category:       Web
+homepage:       https://github.com/saurabhnanda/better-sentry-raven#readme
+author:         Saurabh Nanda
+maintainer:     saurabhnanda@gmail.com
+copyright:      Saurabh Nanda
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+executable better-sentry-raven
+  main-is: Main.hs
+  other-modules:
+      Sentry.HTTP
+      Sentry.Types
+      Paths_better_sentry_raven
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fno-warn-orphans -fno-warn-unused-imports -fno-warn-dodgy-exports -Werror=missing-fields -Werror=incomplete-patterns
+  build-depends:
+      aeson
+    , aeson-casing
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , exceptions
+    , hostname
+    , http-client
+    , http-client-tls
+    , http-types
+    , microlens
+    , microlens-aeson
+    , monad-logger
+    , safe
+    , string-conv
+    , text
+    , time
+    , uri-bytestring
+    , uuid
+  default-language: Haskell2010
+
+test-suite test
+  type: exitcode-stdio-1.0
+  main-is: Test.hs
+  other-modules:
+      Main
+      Sentry.HTTP
+      Sentry.Types
+      Paths_better_sentry_raven
+  hs-source-dirs:
+      src
+      test
+  ghc-options: -Wall -fno-warn-orphans -fno-warn-unused-imports -fno-warn-dodgy-exports -Werror=missing-fields -Werror=incomplete-patterns -threaded -with-rtsopts=-N -main-is Test
+  build-depends:
+      aeson
+    , aeson-casing
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , exceptions
+    , hedgehog
+    , hedgehog-gen
+    , hostname
+    , http-client
+    , http-client-tls
+    , http-types
+    , microlens
+    , microlens-aeson
+    , monad-logger
+    , random
+    , retry
+    , safe
+    , string-conv
+    , tasty
+    , tasty-discover
+    , tasty-hedgehog
+    , tasty-hunit
+    , text
+    , time
+    , unliftio
+    , uri-bytestring
+    , uuid
+  default-language: Haskell2010

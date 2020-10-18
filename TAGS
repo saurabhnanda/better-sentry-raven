@@ -1,0 +1,74 @@
+
+./Setup.hs,15
+main main1,2
+
+./src/Main.hs,52
+module Main Main0,1
+main main2,3
+main main3,4
+
+./src/Sentry/HTTP.hs,74
+module Sentry.HTTP Sentry.HTTP4,5
+store store12,13
+store store15,16
+
+./src/Sentry/Types.hs,1492
+module Sentry.Types Sentry.Types5,6
+newtype EventId EventId25,26
+newtype EventId = EventId EventId25,26
+newtype EventId = EventId { rawEventId rawEventId25,26
+instance instance27,28
+type TagName TagName30,31
+type TagValue TagValue31,32
+data Event Event33,34
+data Event = EventEvent33,34
+  { evtId evtId34,35
+  , evtTimestamp evtTimestamp35,36
+  , evtPlatform evtPlatform36,37
+  , evtLevel evtLevel37,38
+  , evtLogger evtLogger38,39
+  , evtTransaction evtTransaction39,40
+  , evtServerName evtServerName40,41
+  , evtRelease evtRelease41,42
+  , evtDist evtDist42,43
+  , evtTags evtTags43,44
+  , evtEnvironment evtEnvironment44,45
+  , evtModules evtModules45,46
+  , evtExtra evtExtra46,47
+  , evtFingerprint evtFingerprint47,48
+data LogLevel LogLevel54,55
+data LogLevel = FatalFatal54,55
+              | ErrorError55,56
+              | WarningWarning56,57
+              | InfoInfo57,58
+              | DebugDebug58,59
+data Platform Platform64,65
+data Platform = PlatformHaskellPlatformHaskell64,65
+              | PlatformOther PlatformOther65,66
+data SentryConfig SentryConfig127,128
+data SentryConfig = SentryConfigSentryConfig127,128
+  { cfgBaseUrl cfgBaseUrl128,129
+  , cfgKey cfgKey129,130
+  , cfgSecret cfgSecret130,131
+  , cfgProjectId cfgProjectId131,132
+  , cfgManager cfgManager132,133
+  , cfgBaseRequest cfgBaseRequest133,134
+mkSentryConfig mkSentryConfig136,137
+mkSentryConfig mkSentryConfig139,140
+
+./test/Test.hs,424
+module Test Test7,8
+main main28,29
+main main29,30
+genBasicEvent genBasicEvent39,40
+genBasicEvent genBasicEvent40,41
+genUUID genUUID59,60
+genUUID genUUID60,61
+genEventId genEventId64,65
+genEventId genEventId65,66
+genPlatform genPlatform67,68
+genPlatform genPlatform68,69
+genUTCTime genUTCTime70,71
+genUTCTime genUTCTime71,72
+propBasicEvent propBasicEvent77,78
+propBasicEvent propBasicEvent78,79
