@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
@@ -6,9 +7,11 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Test where
 
+import qualified Data.List as DL
 import Test.Tasty as Tasty
 import Test.Tasty.Hedgehog as Tasty
 import Test.Tasty.HUnit as Tasty
@@ -38,6 +41,10 @@ import qualified Control.Monad.Catch as Catch
 import Hedgehog.Internal.Property (writeLog, Log (Annotation))
 import Hedgehog.Internal.Source (getCaller)
 import Hedgehog.Internal.Show (showPretty)
+import Control.Exception
+import Type.Reflection
+import GHC.Word
+
 -- import Data.Function ((&))
 -- import Data.UUID.V4
 
@@ -58,17 +65,97 @@ main = do
       env = TestEnv{..}
   defaultMain $
     testGroup "All tests"
-    [ testProperty "Basic events" $ propBasicEvent env
-    , testCase "List organizations" $ testListAllOrganizations env
-    , testCase "Resolve event Id" $ testResolveEventId env
+    [ testCase "List organizations" $ testListAllOrganizations env
+    -- , testCase "Resolve event Id" $ testResolveEventId env
+    -- , testCase "Event with stacktrace" $ testWithStacktrace env
+    , testCase "Event with user" $ testWithUser env
+    -- , testProperty "Basic events" $ propBasicEvent env
     ]
 
 -- propBasicEvent :: Property
 -- propBasicEvent = _todo
 
-genBasicEvent :: UTCTime -> Gen Event
+genEmail :: Gen String
+genEmail = do
+  x <- Gen.string (Range.linear 1 100) Gen.alphaNum
+  y <- Gen.string (Range.linear 1 100) Gen.alphaNum
+  z <- Gen.string (Range.linear 1 5) Gen.alphaNum
+  pure $ x <> "@" <> y <> "." <> z
+
+genIpAddress :: Gen String
+genIpAddress = do
+  xs <- Gen.list (Range.constant 4 4) $
+        Gen.integral (Range.linear 0 255)
+  pure $
+    DL.intercalate "." $
+    DL.map show xs
+
+genUser :: Gen User
+genUser = do
+  userId <- Gen.maybe $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  userEmail <- Gen.maybe genEmail
+  userIpAddress <- Gen.maybe genIpAddress
+  userUsername <- Gen.maybe $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  let userOtherInfo = Nothing
+  pure User{..}
+
+genKvp :: Int -> Int -> Gen (String, String)
+genKvp l1 l2 = (,)
+  <$> (Gen.string (Range.linear 1 l1) Gen.alphaNum)
+  <*> (Gen.string (Range.linear 1 l2) Gen.alphaNum)
+
+
+genFrame :: (HasCallStack) => Gen Frame
+genFrame = do
+  frFilename <- Gen.maybe $
+                fmap (DL.intercalate "/") $
+                Gen.list (Range.linear 1 5) $
+                Gen.string (Range.linear 1 40) Gen.alphaNum
+  frFunction <- Gen.maybe $
+                Gen.string (Range.linear 1 40) Gen.alphaNum
+  frModule <- Gen.maybe $
+              Gen.string (Range.linear 1 40) Gen.alphaNum
+  frLineno <- Gen.maybe $
+              Gen.integral (Range.linear 1 1000)
+  frColno <- Gen.maybe $
+             Gen.integral (Range.linear 1 1000)
+  frPackage <- Gen.maybe $
+               Gen.string (Range.linear 1 40) Gen.alphaNum
+  pure Frame{..}
+
+genSentryStacktrace :: (HasCallStack) => Gen SentryStacktrace
+genSentryStacktrace = do
+  stFrames <- Gen.list (Range.linear 1 50) genFrame
+  -- stRegisters <- Gen.list (Range.linear 1 16) (genKvp 100 100)
+  pure SentryStacktrace{..}
+
+genSentryException :: (HasCallStack) => Gen SentryException
+genSentryException = do
+  exType <- Gen.maybe $ fmap ("TYPE: " <>) $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  exValue <- Gen.maybe $ fmap ("VALUE: " <>) $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  exModule <- Gen.maybe $ fmap ("MOD: " <> ) $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  exStacktrace <- Gen.maybe genSentryStacktrace
+  pure SentryException{..}
+
+genMsgTemplate :: (HasCallStack) => Gen (InterpolationTemplate, [InterpolationValues])
+genMsgTemplate = do
+  i <- Gen.integral (Range.linear 1 5)
+  str <- fmap (DL.intercalate " %s ") $
+         Gen.list (Range.constant (i+1) (i+1)) $
+         Gen.list (Range.linear 10 20) Gen.alphaNum
+  vals <- Gen.list (Range.constant i i) $
+          Gen.list (Range.linear 1 10) Gen.alphaNum
+  pure (str, vals)
+
+genMessage :: (HasCallStack) => Gen Message
+genMessage = do
+  msgTemplate <- Gen.maybe genMsgTemplate
+  msgFormatted <- Gen.maybe $ Gen.list (Range.linear 1 100) Gen.alphaNum
+  pure Message{..}
+
+genBasicEvent :: (HasCallStack) => UTCTime -> Gen Event
 genBasicEvent curTime = do
-  evtId <- genEventId
+  evtId <- genEventId curTime
   evtTimestamp <- genUTCTime curTime
   evtPlatform <- genPlatform
   evtLevel <- Gen.enumBounded
@@ -84,22 +171,31 @@ genBasicEvent curTime = do
   evtTags <- Gen.list (Range.linear 1 10) t
   evtModules <- Gen.list (Range.linear 1 10) t
   evtExtra <- Gen.list (Range.linear 1 10) t
+  evtMessage <- Gen.maybe genMessage
+  let evtException = []
+      evtUser = Nothing
   pure Event{..}
 
-genUUID :: Gen UUID
-genUUID =
-  let x = Gen.word32 (Range.linear 0 1000)
+genEventWithException :: (HasCallStack) => UTCTime -> Gen Event
+genEventWithException curTime = do
+  evt <- genBasicEvent curTime
+  ex <- Gen.list (Range.linear 0 5) genSentryException
+  pure evt { evtException = ex }
+
+genUUID :: UTCTime -> Gen UUID
+genUUID t =
+  let x = Gen.word32 (Range.linear (fromIntegral $ round $ utcTimeToPOSIXSeconds t) (maxBound :: Word32))
   in UUID.fromWords <$> x <*> x <*> x <*> x
 
-genEventId :: Gen EventId
-genEventId = EventId <$> genUUID
+genEventId :: UTCTime -> Gen EventId
+genEventId t = EventId <$> genUUID t
 
 genPlatform :: Gen Platform
 genPlatform = pure PlatformHaskell
 
 genUTCTime :: UTCTime -> Gen UTCTime
 genUTCTime t = do
-  d <- (Gen.integral (Range.linear (-1*60*60*24) (1*60*60*24)))
+  d <- (Gen.integral (Range.linear (-1*60*60*24) 0))
   pure $ addUTCTime (fromInteger d) t
 
 -- genBasicEvent :: Gen Event
@@ -217,3 +313,37 @@ retryOnTemporaryNetworkErrors statusCodeHandler action =
         InvalidProxyEnvironmentVariable _ _ -> pure False
         ConnectionClosed -> pure True
         InvalidProxySettings _ -> pure False
+
+
+throwWithStack :: (MonadIO m, HasCallStack, Exception e) => e -> m a
+throwWithStack e = UnliftIO.throwIO $ ExceptionWithCallStack e callStack
+
+foo :: (HasCallStack) => Int -> IO ()
+foo i =
+  if i==5
+  then throwWithStack DivideByZero -- error "foo error"
+  else foo (i+1)
+
+foo2 :: (HasCallStack) => IO ()
+foo2 = UnliftIO.catch (foo 0) handler
+  where
+    -- handler :: (HasCallStack) => ExceptionWithCallStack -> IO ()
+    -- handler x@(ExceptionWithCallStack e _) = do
+    --   putStrLn $ show $ toSentry x
+    handler :: (HasCallStack) => SomeException -> IO ()
+    handler x = do
+      putStrLn $ show $ toSentry x
+
+testWithStacktrace :: TestEnv -> IO ()
+testWithStacktrace TestEnv{..} = do
+  evt <- Gen.sample $ genBasicEvent envTime
+  UnliftIO.catch (foo 0) $ \(e :: ExceptionWithCallStack) ->
+    void $ assertEitherM "error while storing event" $
+    Sentry.store envCfg evt{ evtException = [toSentry e] }
+
+testWithUser :: TestEnv -> IO ()
+testWithUser TestEnv{..} = do
+  evt <- Gen.sample $ genBasicEvent envTime
+  user <- Gen.sample genUser
+  void $ assertEitherM "error while storing event" $
+    Sentry.store envCfg evt{ evtUser = Just user }
