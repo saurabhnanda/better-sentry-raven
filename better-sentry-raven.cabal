@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 98009961b1edc20e7dfdd82dc123633ae7fbb4af46cac335ab58fc6635c76b07
+-- hash: 1251b28cb18cc457ddc5ce8e21aad7fda679f5b3e2642aa5e692c79e5c95c989
 
 name:           better-sentry-raven
 version:        0.1.0.0
@@ -33,6 +33,7 @@ executable better-sentry-raven
     , aeson-casing
     , base >=4.7 && <5
     , bytestring
+    , case-insensitive
     , containers
     , exceptions
     , hostname
@@ -67,6 +68,7 @@ test-suite test
     , aeson-casing
     , base >=4.7 && <5
     , bytestring
+    , case-insensitive
     , containers
     , exceptions
     , hedgehog

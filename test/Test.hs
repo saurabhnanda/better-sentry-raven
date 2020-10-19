@@ -25,8 +25,8 @@ import Data.Time.Clock.POSIX
 import Data.Time
 import Data.Either
 import Network.HTTP.Client.TLS
-import Network.HTTP.Client
-import Network.HTTP.Types
+import Network.HTTP.Client as HT
+import Network.HTTP.Types as HT
 import qualified Sentry.HTTP as Sentry
 import UnliftIO
 import Control.Concurrent (threadDelay)
@@ -44,7 +44,8 @@ import Hedgehog.Internal.Show (showPretty)
 import Control.Exception
 import Type.Reflection
 import GHC.Word
-
+import Data.String.Conv
+import qualified Data.CaseInsensitive as CI
 -- import Data.Function ((&))
 -- import Data.UUID.V4
 
@@ -69,6 +70,7 @@ main = do
     -- , testCase "Resolve event Id" $ testResolveEventId env
     -- , testCase "Event with stacktrace" $ testWithStacktrace env
     , testCase "Event with user" $ testWithUser env
+    , testCase "Event with wai request" $ testWithWaiRequest env
     -- , testProperty "Basic events" $ propBasicEvent env
     ]
 
@@ -103,6 +105,13 @@ genKvp :: Int -> Int -> Gen (String, String)
 genKvp l1 l2 = (,)
   <$> (Gen.string (Range.linear 1 l1) Gen.alphaNum)
   <*> (Gen.string (Range.linear 1 l2) Gen.alphaNum)
+
+genKvpAssignments :: Int -> Int -> Gen [String]
+genKvpAssignments l1 l2 =
+  fmap (DL.map (\(k, v) -> k <> "=" <> v)) $
+  Gen.list (Range.linear 0 10) $
+  genKvp l1 l2
+
 
 
 genFrame :: (HasCallStack) => Gen Frame
@@ -174,6 +183,7 @@ genBasicEvent curTime = do
   evtMessage <- Gen.maybe genMessage
   let evtException = []
       evtUser = Nothing
+      evtRequest = Nothing
   pure Event{..}
 
 genEventWithException :: (HasCallStack) => UTCTime -> Gen Event
@@ -315,6 +325,29 @@ retryOnTemporaryNetworkErrors statusCodeHandler action =
         InvalidProxySettings _ -> pure False
 
 
+genWaiRequest :: Gen HT.Request
+genWaiRequest = do
+  method_ <- Gen.element ["GET", "POST", "PUT", "HEAD", "DELETE"]
+  host_ <- Gen.string (Range.linear 1 100) Gen.alphaNum
+  port_ <- Gen.integral (Range.linear 1 65535)
+  path_ <- fmap (DL.intercalate "/") $
+           Gen.list (Range.linear 1 5) $
+           Gen.string (Range.linear 1 10) Gen.alphaNum
+  queryString_ <- fmap (DL.intercalate "&") $ genKvpAssignments 10 50
+  mCookieHeader <- Gen.maybe $ (,)
+                  <$> (pure hCookie)
+                  <*> (fmap toS $ fmap (DL.intercalate "; ") $ genKvpAssignments 10 50)
+  otherHeaders <- fmap (DL.map (\(k, v) -> (CI.mk $ toS k, toS v))) $
+                  Gen.list (Range.linear 0 10) $
+                  genKvp 10 50
+  pure defaultRequest { method = method_
+                      , host = toS host_
+                      , port = port_
+                      , path = toS path_
+                      , queryString = toS queryString_
+                      , requestHeaders = ((maybeToList mCookieHeader) <> otherHeaders)
+                      }
+
 throwWithStack :: (MonadIO m, HasCallStack, Exception e) => e -> m a
 throwWithStack e = UnliftIO.throwIO $ ExceptionWithCallStack e callStack
 
@@ -347,3 +380,10 @@ testWithUser TestEnv{..} = do
   user <- Gen.sample genUser
   void $ assertEitherM "error while storing event" $
     Sentry.store envCfg evt{ evtUser = Just user }
+
+testWithWaiRequest :: TestEnv -> IO ()
+testWithWaiRequest TestEnv{..} = do
+  evt <- Gen.sample $ genBasicEvent envTime
+  req <- Gen.sample genWaiRequest
+  void $ assertEitherM "error while storing event" $
+    Sentry.store envCfg evt{ evtRequest = Just $ SentryRequest req }

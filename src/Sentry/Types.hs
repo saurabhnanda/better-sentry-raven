@@ -29,6 +29,8 @@ import GHC.Stack
 import Control.Exception
 import Type.Reflection
 import GHC.Exts (toList)
+import qualified Network.HTTP.Client as HT
+import qualified Data.CaseInsensitive as CI
 
 newtype EventId = EventId { rawEventId :: UUID } deriving (Eq, Show, Generic)
 -- newtype OrgSlug = OrgSlug { rawOrgSlug :: BS.ByteString } deriving (Eq, Show, Generic, FromJSON, ToJSON)
@@ -72,7 +74,8 @@ data Event = Event
   , evtMessage :: !(Maybe Message)
   , evtException :: ![SentryException]
   , evtUser :: !(Maybe User)
-  } deriving (Eq, Show, Generic)
+  , evtRequest :: !(Maybe SentryRequest)
+  } deriving (Show, Generic)
 
 instance ToJSON Event where
   toJSON Event{..} = Aeson.object $
@@ -92,6 +95,7 @@ instance ToJSON Event where
     , "fingerprint" .= evtFingerprint
     , "message" .= evtMessage
     , "user" .= evtUser
+    , "request" .= evtRequest
     ] <>
     (if DL.null evtException then [] else [ "exception" .= Aeson.object [ "values" Aeson..= evtException ] ])
     where
@@ -317,3 +321,18 @@ instance ToJSON User where
         Nothing -> []
         Just x -> DL.map (\(k, v) -> k Aeson..= v) $
                   toList x
+
+newtype SentryRequest = SentryRequest { rawSentryRequest :: HT.Request } deriving (Show)
+
+instance ToJSON SentryRequest where
+  toJSON SentryRequest{rawSentryRequest=r} = Aeson.object $ core <> cookies
+    where
+      core = [ "method" Aeson..= (toS $ HT.method r :: T.Text)
+             , "url" Aeson..= ("//" <> (toS $ HT.host r) <> ":" <> (toS $ show $ HT.port r) :: T.Text)
+             , "query_string" Aeson..= (toS $ HT.queryString r :: T.Text)
+             , "headers" Aeson..= (DL.map (\(k, v) -> (toS $ CI.original k, toS v) :: (T.Text, T.Text)) $  HT.requestHeaders r)
+             -- , "env" Aeson..= _
+             ]
+      cookies = case DL.lookup hCookie (HT.requestHeaders r) of
+        Nothing -> []
+        Just v -> [ "cookies" Aeson..= (toS v :: T.Text) ]
