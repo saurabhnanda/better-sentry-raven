@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1251b28cb18cc457ddc5ce8e21aad7fda679f5b3e2642aa5e692c79e5c95c989
+-- hash: 40873e0cf651d0014636018b30ac0c2eb7ca7a03f92cf7ac80c8f99b98435623
 
 name:           better-sentry-raven
 version:        0.1.0.0
@@ -19,11 +19,17 @@ build-type:     Simple
 extra-source-files:
     README.md
 
-executable better-sentry-raven
-  main-is: Main.hs
-  other-modules:
-      Sentry.HTTP
+library
+  exposed-modules:
       Sentry.Types
+      Sentry.Lens
+      Sentry.Blank
+      Sentry.HTTP
+      Sentry.MonadLogger
+      Sentry.SentryT
+  other-modules:
+      Main
+      Sentry.Utils
       Paths_better_sentry_raven
   hs-source-dirs:
       src
@@ -36,19 +42,25 @@ executable better-sentry-raven
     , case-insensitive
     , containers
     , exceptions
+    , fast-logger
     , hostname
     , http-client
     , http-client-tls
     , http-types
     , microlens
     , microlens-aeson
+    , microlens-th
     , monad-logger
+    , mtl
+    , random
     , safe
     , string-conv
     , text
     , time
+    , unliftio
     , uri-bytestring
     , uuid
+    , wai
   default-language: Haskell2010
 
 test-suite test
@@ -56,8 +68,13 @@ test-suite test
   main-is: Test.hs
   other-modules:
       Main
+      Sentry.Blank
       Sentry.HTTP
+      Sentry.Lens
+      Sentry.MonadLogger
+      Sentry.SentryT
       Sentry.Types
+      Sentry.Utils
       Paths_better_sentry_raven
   hs-source-dirs:
       src
@@ -71,6 +88,7 @@ test-suite test
     , case-insensitive
     , containers
     , exceptions
+    , fast-logger
     , hedgehog
     , hedgehog-gen
     , hostname
@@ -79,7 +97,9 @@ test-suite test
     , http-types
     , microlens
     , microlens-aeson
+    , microlens-th
     , monad-logger
+    , mtl
     , random
     , retry
     , safe
@@ -93,4 +113,5 @@ test-suite test
     , unliftio
     , uri-bytestring
     , uuid
+    , wai
   default-language: Haskell2010

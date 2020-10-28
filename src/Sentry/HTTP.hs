@@ -1,6 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Sentry.HTTP where
 
@@ -13,43 +15,102 @@ import GHC.Stack
 import URI.ByteString
 import qualified Data.ByteString as BS
 import Safe (fromJustNote)
+import Network.HTTP.Client as HTTP ( Manager, defaultRequest, Request, method, host, port
+                                   , path, queryString, requestHeaders, checkResponse, throwErrorStatusCodes)
+import Network.HTTP.Client.TLS (getGlobalManager)
+import URI.ByteString
+import Lens.Micro
+import Lens.Micro.Aeson (key, _String)
+import UnliftIO
+import qualified Data.List as DL
+import Data.Maybe
+import Data.String.Conv
 
-store :: (HasCallStack)
-      => SentryConfig
-      -> Event
-      -> IO (Either String Aeson.Value)
-store SentryConfig{..} evt = do
-  let finalReq = cfgBaseRequest { requestBody = RequestBodyLBS (Aeson.encode evt)
-                                , path = (path cfgBaseRequest) <> "/store/"
-                                }
-  (httpLbs finalReq cfgManager) >>= (pure . Aeson.eitherDecode . responseBody)
+-- data HttpConfig = HttpConfig
+--   { cfgManager :: !Manager
+--   , cfgBaseRequest :: !Request
+--   }
 
-apiAuthHeaders :: Maybe BS.ByteString
-               -> RequestHeaders
-apiAuthHeaders tkn = [ (hContentType, "application/json")
-                     , (hAccept, "application/json")
-                     , (hAuthorization, maybe "" ("Bearer " <>) tkn)
-                     ]
+-- mkHttpConfig :: Maybe Manager
+--              -> (HttpConfig -> HttpConfig)
+--              -> HttpConfig
+-- mkHttpConfig mManager overrideFn = do
+--   cfgManager <- fromMaybe getGlobalManager mManager
+--   -- let cfgBaseRequest =
+--   pure $ overrideFn HttpConfig{..}
 
-listAllOrganizations :: (HasCallStack)
-                     => SentryConfig
-                     -> IO (Either String Aeson.Value)
-listAllOrganizations SentryConfig{..} = do
-  let req = cfgBaseRequest { path = "/api/0/organizations/"
-                           , method = "GET"
-                           , requestHeaders = apiAuthHeaders cfgAuthToken
-                           }
-  (httpLbs req cfgManager) >>= (pure . Aeson.eitherDecode . responseBody)
+mkHttpTransport :: (HasCallStack, Exception e)
+                => Manager
+                -> (Event -> e -> IO (Maybe EventId))
+                -> SentryService
+                -> (Event -> IO (Maybe EventId))
+mkHttpTransport mgr fallbackTransport SentryService{..} =
+  let authComponents = [ ("sentry_version", "7")
+                       , ("sentry_client", "better_haskell_raven/1.0")
+                       -- TODO: send the timestamp, or not?
+                       -- , ("sentry_timestamp", _)
+                       , ("sentry_key", svcKey)
+                       ] -- <> (maybe [] (\s -> [("sentry_secret", s)]) secret)
+      authString = BS.intercalate ", " $
+                   DL.map (\(k, v) -> k <> "=" <> v) authComponents
+      -- secret = cfgDsn ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL
+      baseReq = HTTP.defaultRequest
+                { method = "POST"
+                , host = maybe "" toS (svcDsn ^? authorityL . _Just . authorityHostL . hostBSL)
+                , port = fromMaybe 80 (svcDsn ^? authorityL . _Just . authorityPortL . _Just . portNumberL)
+                , path = "/api/" <> svcProjectId <> "/store/"
+                -- TODO: handle query-string
+                -- , queryString = baseUrl ^. queryL
+                , requestHeaders = [ (hContentType, "application/json")
+                                   , (hAccept, "application/json")
+                                   , ("X-Sentry-Auth", "Sentry " <> authString)
+                                   ]
+                , checkResponse = throwErrorStatusCodes
+                }
+      -- TODO: Handle rate-limiting?
+      transport evt = (flip catch) (fallbackTransport evt) $ do
+        let req = baseReq { requestBody = RequestBodyLBS (Aeson.encode evt) }
+        (fmap (Aeson.eitherDecode . responseBody) $ httpLbs req mgr) >>= \case
+          Left e -> throwString e
+          Right (r :: Aeson.Value) -> pure $ fmap httpToEventId $ r ^? key "id" . _String
+  in transport
 
-resolveEventId :: (HasCallStack)
-               => SentryConfig
-               -> EventId
-               -> IO (Either String Aeson.Value)
-resolveEventId SentryConfig{..} evtId =
-  let req = cfgBaseRequest { path = "/api/0/organizations/" <>
-                                    (fromJustNote "org-slug is missing" cfgOrgSlug) <>
-                                    "/eventids/" <> eventIdToHttp evtId <> "/"
-                           , method = "GET"
-                           , requestHeaders = apiAuthHeaders cfgAuthToken
-                           }
-  in (httpLbs req cfgManager) >>= (pure . Aeson.eitherDecode . responseBody)
+-- store :: (HasCallStack)
+--       => SentryConfig
+--       -> Event
+--       -> IO (Either String Aeson.Value)
+-- store SentryConfig{..} evt = do
+--   let finalReq = cfgBaseRequest { requestBody = RequestBodyLBS (Aeson.encode evt)
+--                                 , path = (path cfgBaseRequest) <> "/store/"
+--                                 }
+--   (httpLbs finalReq cfgManager) >>= (pure . Aeson.eitherDecode . responseBody)
+
+-- apiAuthHeaders :: Maybe BS.ByteString
+--                -> RequestHeaders
+-- apiAuthHeaders tkn = [ (hContentType, "application/json")
+--                      , (hAccept, "application/json")
+--                      , (hAuthorization, maybe "" ("Bearer " <>) tkn)
+--                      ]
+
+-- listAllOrganizations :: (HasCallStack)
+--                      => SentryConfig
+--                      -> IO (Either String Aeson.Value)
+-- listAllOrganizations SentryConfig{..} = do
+--   let req = cfgBaseRequest { path = "/api/0/organizations/"
+--                            , method = "GET"
+--                            , requestHeaders = apiAuthHeaders cfgAuthToken
+--                            }
+--   (httpLbs req cfgManager) >>= (pure . Aeson.eitherDecode . responseBody)
+
+-- resolveEventId :: (HasCallStack)
+--                => SentryConfig
+--                -> EventId
+--                -> IO (Either String Aeson.Value)
+-- resolveEventId SentryConfig{..} evtId =
+--   let req = cfgBaseRequest { path = "/api/0/organizations/" <>
+--                                     (fromJustNote "org-slug is missing" cfgOrgSlug) <>
+--                                     "/eventids/" <> eventIdToHttp evtId <> "/"
+--                            , method = "GET"
+--                            , requestHeaders = apiAuthHeaders cfgAuthToken
+--                            }
+--   in (httpLbs req cfgManager) >>= (pure . Aeson.eitherDecode . responseBody)

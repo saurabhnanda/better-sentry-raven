@@ -1,27 +1,34 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Sentry.Types where
 
+import URI.ByteString
+import Sentry.Blank
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
 import Data.Time
 import Data.UUID as UUID
 import Data.UUID.V4 as UUID
-import URI.ByteString
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
 import Lens.Micro
 import GHC.Generics
 import Data.Aeson as Aeson
 import Data.Aeson.Casing as Casing
 import Data.Char (toLower)
 import qualified Data.List as DL
-import Network.HTTP.Client as HTTP ( Manager, defaultRequest, Request, method, host, port
-                                   , path, queryString, requestHeaders, checkResponse, throwErrorStatusCodes)
+-- import Network.HTTP.Client as HTTP ( Manager, defaultRequest, Request, method, host, port
+--                                    , path, queryString, requestHeaders, checkResponse, throwErrorStatusCodes)
 import Data.Maybe
 import Data.String.Conv (toS, StringConv)
 import Network.HTTP.Types.Header as HTTP
@@ -31,6 +38,11 @@ import Type.Reflection
 import GHC.Exts (toList)
 import qualified Network.HTTP.Client as HT
 import qualified Data.CaseInsensitive as CI
+import Lens.Micro.Aeson (key, _String, _Object)
+import Control.Applicative ((<|>))
+import UnliftIO
+import qualified Network.Wai as Wai
+-- import Lens.Micro
 
 newtype EventId = EventId { rawEventId :: UUID } deriving (Eq, Show, Generic)
 -- newtype OrgSlug = OrgSlug { rawOrgSlug :: BS.ByteString } deriving (Eq, Show, Generic, FromJSON, ToJSON)
@@ -77,6 +89,67 @@ data Event = Event
   , evtRequest :: !(Maybe SentryRequest)
   } deriving (Show, Generic)
 
+{-# INLINE mkBlankEvent #-}
+mkBlankEvent :: (HasCallStack, MonadIO m)
+             => m Event
+mkBlankEvent = do
+  (eid, t) <- liftIO $ (,) <$> UUID.nextRandom <*> getCurrentTime
+  pure Event
+    { evtId = EventId eid
+    , evtTimestamp = t
+    , evtPlatform = PlatformHaskell
+    , evtLevel = Info
+    , evtLogger = Nothing
+    , evtTransaction = Nothing
+    , evtServerName = Nothing
+    , evtRelease = Nothing
+    , evtDist = Nothing
+    , evtTags = []
+    , evtEnvironment = Nothing
+    , evtModules = []
+    , evtExtra = []
+    , evtFingerprint = []
+    , evtMessage = Nothing
+    , evtException = []
+    , evtUser = Nothing
+    , evtRequest = Nothing
+    }
+
+
+setMessage :: (StringConv msg String) => msg -> Event -> Event
+setMessage msg =
+  let m = Message { msgFormatted = Just $ toS msg
+                  , msgTemplate = Nothing
+                  }
+  in (\x -> x { evtMessage = Just m })
+
+setMessageTemplate :: (InterpolationTemplate, [InterpolationValues]) -> Event -> Event
+setMessageTemplate tpl =
+  let m = Message { msgFormatted = Nothing
+                  , msgTemplate = Just tpl
+                  }
+  in (\x -> x { evtMessage = Just m })
+
+
+-- {-# INLINE mkMessage #-}
+-- mkMessage :: (HasCallStack)
+--           => EventId
+--           -> UTCTime
+--           -> LogLevel
+--           -> String
+--           -> Event
+-- mkMessage eid t ll msg =
+
+--   let m = Message { msgFormatted = Just msg
+--                   , msgTemplate = Nothing
+--                   }
+--   in (mkMininmal eid t ll) { evtMessage = Just m }
+
+-- mkMessageTemplate :: (HasCallStack)
+--                   => EventId
+--                   -> UTCTime
+--                   -> LogLevel
+--                   -> 
 instance ToJSON Event where
   toJSON Event{..} = Aeson.object $
     [ "event_id" .= evtId
@@ -124,20 +197,38 @@ instance ToJSON Platform where
     PlatformOther y -> y
 
 data SentryException = SentryException
-  { exType :: !(Maybe String)
+  { exExceptionType :: !(Maybe String)
   , exValue :: !(Maybe String)
-  , exModule :: !(Maybe String)
+  , exModuleName :: !(Maybe String)
   -- , exThreadId :: !(Maybe ThreadId)
   -- , exMechanism :: !_
   , exStacktrace :: !(Maybe SentryStacktrace)
   -- , exFrames :: ![Frame]
   -- , exRegisters :: ![(String, String)]
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, Blank)
 
 type ThreadId = String
 
+
 instance ToJSON SentryException where
-  toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
+  toJSON = (genericToJSON (Casing.aesonPrefix Casing.snakeCase))
+    -- where
+    --   overrides :: Aeson.Value -> Aeson.Value
+    --   overrides v =
+    --     -- let et = v at "exception_type"
+    --     --     m = v ^? (key "module_name")
+    --     v & at . "exception_type" .~ Nothing
+    --          -- & at (key "type") ?~ et
+    --          -- & at (key "module_name") .~ Nothing
+    --          -- & at (key "module") ?~ m
+
+-- instance ToJSON SentryException where
+--   toJSON SentryException{..} = Aeson.object
+--     [ "type" Aeson..= exExceptionType
+--     , "value" Aeson..= exValue
+--     , "module" Aeson..= exModuleName
+--     , "stacktrace" Aeson..= exStacktrace
+--     ]
 
 -- data SentryThread = SentryThread
 --   { thId :: !ThreadId
@@ -150,7 +241,7 @@ instance ToJSON SentryException where
 data SentryStacktrace = SentryStacktrace
   { stFrames :: ![Frame]
   -- , stRegisters :: ![(String, String)]
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, Blank)
 
 instance ToJSON SentryStacktrace where
   toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
@@ -173,7 +264,7 @@ data Frame = Frame
   -- , frImageAddr :: ()
   , frPackage :: !(Maybe String)
   -- , frPlatform :: !(Maybe Platform)
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, Blank)
 
 instance ToJSON Frame where
   toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
@@ -181,7 +272,7 @@ instance ToJSON Frame where
 data Message = Message
   { msgFormatted :: !(Maybe String)
   , msgTemplate :: !(Maybe (InterpolationTemplate, [InterpolationValues]))
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic, Blank)
 
 type InterpolationValues = String
 type InterpolationTemplate = String
@@ -198,61 +289,65 @@ instance ToJSON Message where
             Nothing -> []
             Just x -> [ "formatted" Aeson..= x ]
 
-data SentryConfig = SentryConfig
-  { cfgBaseUrl :: !(URIRef Absolute)
-  , cfgKey :: !BS.ByteString
-  , cfgSecret :: !(Maybe BS.ByteString)
-  , cfgProjectId :: !BS.ByteString
-  , cfgManager :: !Manager
-  , cfgBaseRequest :: !Request
-  , cfgAuthToken :: !(Maybe BS.ByteString)
-  , cfgOrgSlug :: !(Maybe BS.ByteString)
-  }
+-- data SentryConfig = SentryConfig
+--   { cfgBaseUrl :: !(URIRef Absolute)
+--   , cfgKey :: !BS.ByteString
+--   , cfgSecret :: !(Maybe BS.ByteString)
+--   , cfgProjectId :: !BS.ByteString
+--   , cfgManager :: !Manager
+--   , cfgBaseRequest :: !Request
+--   , cfgAuthToken :: !(Maybe BS.ByteString)
+--   , cfgOrgSlug :: !(Maybe BS.ByteString)
+--   -- , cfgEventUpdater :: !(Event -> Event)
+--   --, cfgBeforeSend
+--   --, cfgSampleRate
+--   --, cfgBeforeBreadcrumb
+--   --, cfgTransport / cfgClient
+--   }
 
-
-mkSentryConfig :: Manager
-               -> BS.ByteString
-               -> Either String SentryConfig
-mkSentryConfig mgr x = case parseURI laxURIParserOptions x of
-  Left e -> Left $ show e
-  Right u ->
-    case (u ^? authorityL . _Just . authorityUserInfoL . _Just . uiUsernameL) of
-      Nothing -> Left "Secret key is mandatory"
-      Just key ->
-        let baseUrl = u & (authorityL . _Just . authorityUserInfoL) .~ Nothing
-                        & pathL %~ ("/api" <>)
-            secret = u ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL
-            authComponents = [ ("sentry_version", "7")
-                             , ("sentry_client", "better_haskell_raven/1.0")
-                             -- TODO: send the timestamp, or not?
-                             -- , ("sentry_timestamp", _)
-                             , ("sentry_key", key)
-                             ] -- <> (maybe [] (\s -> [("sentry_secret", s)]) secret)
-            authString = BS.intercalate ", " $
-                         DL.map (\(k, v) -> k <> "=" <> v) authComponents 
-            baseReq = HTTP.defaultRequest
-                      { method = "POST"
-                      , host = maybe "" toS (baseUrl ^? authorityL . _Just . authorityHostL . hostBSL)
-                      , port = fromMaybe 80 (baseUrl ^? authorityL . _Just . authorityPortL . _Just . portNumberL)
-                      , path = baseUrl ^. pathL
-                      -- TODO: handle query-string
-                      -- , queryString = baseUrl ^. queryL
-                      , requestHeaders = [ (hContentType, "application/json")
-                                         , (hAccept, "application/json")
-                                         , ("X-Sentry-Auth", "Sentry " <> authString)
-                                         ]
-                      , checkResponse = throwErrorStatusCodes
-                      }
-       in Right SentryConfig
-          { cfgBaseUrl = baseUrl
-          , cfgKey = key
-          , cfgSecret = secret
-          , cfgProjectId = BS.drop 1 $ u ^. pathL
-          , cfgManager = mgr
-          , cfgBaseRequest = baseReq
-          , cfgAuthToken = Nothing
-          , cfgOrgSlug = Nothing
-          }
+-- mkSentryConfig :: Manager
+--                -> BS.ByteString
+--                -> Either String SentryConfig
+-- mkSentryConfig mgr x = case parseURI laxURIParserOptions x of
+--   Left e -> Left $ show e
+--   Right u ->
+--     case (u ^? authorityL . _Just . authorityUserInfoL . _Just . uiUsernameL) of
+--       Nothing -> Left "Secret key is mandatory"
+--       Just key_ ->
+--         let baseUrl = u & (authorityL . _Just . authorityUserInfoL) .~ Nothing
+--                         & pathL %~ ("/api" <>)
+--             secret = u ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL
+--             authComponents = [ ("sentry_version", "7")
+--                              , ("sentry_client", "better_haskell_raven/1.0")
+--                              -- TODO: send the timestamp, or not?
+--                              -- , ("sentry_timestamp", _)
+--                              , ("sentry_key", key_)
+--                              ] -- <> (maybe [] (\s -> [("sentry_secret", s)]) secret)
+--             authString = BS.intercalate ", " $
+--                          DL.map (\(k, v) -> k <> "=" <> v) authComponents 
+--             baseReq = HTTP.defaultRequest
+--                       { method = "POST"
+--                       , host = maybe "" toS (baseUrl ^? authorityL . _Just . authorityHostL . hostBSL)
+--                       , port = fromMaybe 80 (baseUrl ^? authorityL . _Just . authorityPortL . _Just . portNumberL)
+--                       , path = baseUrl ^. pathL
+--                       -- TODO: handle query-string
+--                       -- , queryString = baseUrl ^. queryL
+--                       , requestHeaders = [ (hContentType, "application/json")
+--                                          , (hAccept, "application/json")
+--                                          , ("X-Sentry-Auth", "Sentry " <> authString)
+--                                          ]
+--                       , checkResponse = throwErrorStatusCodes
+--                       }
+--        in Right SentryConfig
+--           { cfgBaseUrl = baseUrl
+--           , cfgKey = key_
+--           , cfgSecret = secret
+--           , cfgProjectId = BS.drop 1 $ u ^. pathL
+--           , cfgManager = mgr
+--           , cfgBaseRequest = baseReq
+--           , cfgAuthToken = Nothing
+--           , cfgOrgSlug = Nothing
+--           }
 
 callStackToSentry :: CallStack -> [Frame]
 callStackToSentry cs = DL.reverse $ (flip DL.map) (getCallStack cs) $ \(fnName, SrcLoc{..}) ->  Frame
@@ -267,9 +362,9 @@ callStackToSentry cs = DL.reverse $ (flip DL.map) (getCallStack cs) $ \(fnName, 
 class (Exception e) => ToSentry e where
   toSentry :: e -> SentryException
   toSentry e = SentryException
-    { exType = Just $ show $ typeOf e
+    { exExceptionType = Just $ show $ typeOf e
     , exValue = Just $ displayException e
-    , exModule = Nothing
+    , exModuleName = Nothing
     , exStacktrace = Nothing
     }
 
@@ -291,9 +386,9 @@ instance Show ExceptionWithCallStack where
 
 instance ToSentry ExceptionWithCallStack where
   toSentry (ExceptionWithCallStack e st) = SentryException
-    { exType = Just $ show $ typeOf e
+    { exExceptionType = Just $ show $ typeOf e
     , exValue = Just $ displayException e
-    , exModule = Nothing
+    , exModuleName = Nothing
     , exStacktrace = Just $ SentryStacktrace { stFrames = callStackToSentry st }
     }
 
@@ -308,7 +403,22 @@ data User = User
   , userIpAddress :: !(Maybe String)
   , userUsername :: !(Maybe String)
   , userOtherInfo :: !(Maybe Aeson.Object)
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, Blank)
+
+instance Semigroup User where
+  (<>) u1 u2 = User
+    { userId = (userId u2) <|> (userId u1)
+    , userEmail = (userEmail u2) <|> (userEmail u1)
+    , userIpAddress = (userIpAddress u2) <|> (userIpAddress u1)
+    , userUsername = (userUsername u2) <|> (userUsername u1)
+    , userOtherInfo = let x = (fromMaybe mempty (userOtherInfo u1)) <> (fromMaybe mempty (userOtherInfo u2))
+                      in if x==mempty
+                         then Nothing
+                         else Just x
+    }
+
+instance Monoid User where
+  mempty = blank
 
 instance ToJSON User where
   toJSON User{..} = Aeson.object $ core <> extra
@@ -322,17 +432,164 @@ instance ToJSON User where
         Just x -> DL.map (\(k, v) -> k Aeson..= v) $
                   toList x
 
-newtype SentryRequest = SentryRequest { rawSentryRequest :: HT.Request } deriving (Show)
+newtype SentryRequest = SentryRequest { rawSentryRequest :: Wai.Request } deriving (Show)
 
 instance ToJSON SentryRequest where
   toJSON SentryRequest{rawSentryRequest=r} = Aeson.object $ core <> cookies
     where
-      core = [ "method" Aeson..= (toS $ HT.method r :: T.Text)
-             , "url" Aeson..= ("//" <> (toS $ HT.host r) <> ":" <> (toS $ show $ HT.port r) :: T.Text)
-             , "query_string" Aeson..= (toS $ HT.queryString r :: T.Text)
-             , "headers" Aeson..= (DL.map (\(k, v) -> (toS $ CI.original k, toS v) :: (T.Text, T.Text)) $  HT.requestHeaders r)
+      url = (if Wai.isSecure r then "https://" else "http://") <>
+            (fromMaybe "unknown" $ Wai.requestHeaderHost r) <>
+            (Wai.rawPathInfo r)
+      core = [ "method" Aeson..= (toS $ Wai.requestMethod r :: T.Text)
+             , "url" Aeson..= (toS url :: T.Text)
+             , "query_string" Aeson..= (toS $ Wai.rawQueryString r :: T.Text)
+             , "headers" Aeson..= (DL.map (\(k, v) -> (toS $ CI.original k, toS v) :: (T.Text, T.Text)) $  Wai.requestHeaders r)
+             -- , "data" Aeson..= (toS $ Wai.strictRequestBody r)
              -- , "env" Aeson..= _
              ]
-      cookies = case DL.lookup hCookie (HT.requestHeaders r) of
+      cookies = case DL.lookup hCookie (Wai.requestHeaders r) of
         Nothing -> []
         Just v -> [ "cookies" Aeson..= (toS v :: T.Text) ]
+      -- bodyData = case Wai.requestBody r of
+      --   Wai.RequestBodyLBS lbs -> bodyDataWithContentType (toS lbs)
+      --   Wai.RequestBodyBS bs -> bodyDataWithContentType (toS bs)
+      --   Wai.RequestBodyBuilder i _ -> [ "data" Aeson..= ("(RequestBodyBuilder of " <> show i <> " bytes") ]
+      --   Wai.RequestBodyStream i _ -> [ "data" Aeson..= ("(RequestBodyStream of " <> show i <> " bytes") ]
+      --   Wai.RequestBodyStreamChunked _ -> [ "data" Aeson..= ("(RequestBodyStreamChunked)" :: T.Text) ]
+      --   Wai.RequestBodyIO _ -> [ "data" Aeson..= ("(RequestBodyIO)" :: T.Text) ]
+      -- bodyDataWithContentType (d :: LT.Text) =
+      --   if d==mempty  then []  else [ "data" Aeson..= d ]
+        -- TODO: can we really do anything based on content-type here?
+          -- case DL.lookup hContentType (requestHeaders r) of
+          -- Nothing -> 
+          -- Just ct ->
+          --   if "json" `BS.isInfixOf` ct
+          --   then [ "data" Aeson..= ]
+-- "_level",
+-- "_name",
+-- "_fingerprint",
+-- "_transaction",
+-- "_user",
+-- "_tags",
+-- "_contexts",
+-- "_extras",
+-- "_breadcrumbs",
+-- "_event_processors",
+-- "_error_processors",
+-- "_should_capture",
+-- "_span",
+-- "_session",
+-- "_force_auto_session_tracking",
+
+data ScopeOp a = ScopeOpAdd a
+               | ScopeOpReplace a
+               | ScopeOpRemove
+               | ScopeOpNothing
+               deriving (Eq, Show, Generic)
+
+instance Blank (ScopeOp a) where
+  blank = ScopeOpNothing
+
+class ApplyScopeOp a b where
+  applyScopeOp :: a -> ScopeOp b -> a
+
+instance ApplyScopeOp a a where
+  applyScopeOp a op = case op of
+    ScopeOpAdd a_ -> a_
+    ScopeOpReplace a_ -> a_
+    ScopeOpRemove -> a
+    ScopeOpNothing -> a
+
+instance ApplyScopeOp (Maybe a) a where
+  applyScopeOp x op = case op of
+    ScopeOpAdd b -> Just b
+    ScopeOpReplace b -> Just b
+    ScopeOpRemove -> Nothing
+    ScopeOpNothing -> x
+
+instance {-# OVERLAPS #-} ApplyScopeOp [a] [a] where
+  applyScopeOp a op = case op of
+    ScopeOpAdd b -> b <> a
+    ScopeOpReplace b -> b
+    ScopeOpRemove -> []
+    ScopeOpNothing -> a
+
+instance {-# OVERLAPS #-} ApplyScopeOp (Maybe User) User where
+  applyScopeOp u1 op = case op of
+    ScopeOpNothing -> u1
+    ScopeOpRemove -> Nothing
+    ScopeOpReplace u2 -> Just u2
+    ScopeOpAdd u2 -> Just $ (fromMaybe mempty u1) <> u2
+
+data Scope = Scope
+  { scopeLevel :: !(ScopeOp LogLevel)
+  , scopeFingerprint :: !(ScopeOp [String])
+  , scopeUser :: !(ScopeOp User)
+  , scopeTags :: !(ScopeOp [(String, String)])
+  , scopeExtra :: !(ScopeOp [(String, String)])
+  , scopeTransaction :: !(ScopeOp String)
+  , scopeLastEventId :: !(Maybe EventId)
+  -- , scopeBreadcrumbs :: ![Breadcrumb]
+  -- TODO
+  --, scopeContexts ::
+  } deriving (Eq, Show, Generic, Blank)
+
+data Breadcrumb = Breadcrumb {}
+
+
+data SentryService = SentryService
+  { svcDsn :: !(URIRef Absolute)
+  , svcKey :: !BS.ByteString
+  , svcSecret :: !(Maybe BS.ByteString)
+  , svcProjectId :: !BS.ByteString
+  , svcTransport :: (Event -> IO (Maybe EventId))
+  , svcDisabled :: !Bool
+  , svcSampleRate :: !Float
+  , svcBeforeSend :: (Event -> IO (Maybe Event))
+  , svcScopeRef :: !(IORef Scope)
+  , svcMkBlankEvent :: !(IO Event)
+  }
+
+stderrTransport :: Event
+                -> IO (Maybe EventId)
+stderrTransport evt = do
+  BSL.hPutStr stderr $ (Aeson.encode evt) <> "\n"
+  pure Nothing
+
+mkSentryService :: HasCallStack
+                => BS.ByteString
+                -> (Event -> Event)
+                -> (SentryService -> Event -> IO (Maybe EventId))
+                -> IO SentryService
+mkSentryService dsn applyDefaults transport = case parseURI laxURIParserOptions dsn of
+  Left e -> error $ show e
+  Right dsnUri -> do
+    scopeRef <- newIORef blank
+    let svc = SentryService
+              { svcDsn = dsnUri
+              , svcKey = fromMaybe (error "Secret key is mandatory") $
+                         dsnUri ^? authorityL . _Just . authorityUserInfoL . _Just . uiUsernameL
+              , svcSecret = dsnUri ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL
+              , svcProjectId = BS.drop 1 $ dsnUri ^. pathL
+              , svcDisabled = False
+              , svcSampleRate = 1.0
+              , svcBeforeSend = pure . Just
+              , svcTransport = transport svc
+              , svcScopeRef = scopeRef
+              , svcMkBlankEvent = (mkBlankEvent >>= (pure . applyDefaults))
+              }
+    pure svc
+
+-- setTransport :: (Event -> IO (Maybe EventId))
+--              -> SentryService
+--              -> SentryService
+-- setTransport t s = s { svcTransport = t }
+
+-- data SentrySdk m = HasSentry m => SentrySdk
+--   { sdkTransport :: !(Event -> m (Maybe EventId))
+--   , sdkDisabled :: !Bool
+--   , sdkSampleRate :: !Float
+--   , sdkBeforeSend :: !(Event -> m Event)
+--   , sdkScope :: !Scope
+--   -- TODO: , sdkBeforeBreadcrumb :: !Breadcrumb
+--   }
