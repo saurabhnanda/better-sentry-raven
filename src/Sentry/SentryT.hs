@@ -21,6 +21,9 @@ import Control.Monad.Reader
 import Sentry.Blank
 import Data.String.Conv
 import Debug.Trace
+import GHC.Stack
+import Data.UUID.V4 as UUID
+import Data.Time
 
 type SentryT = ReaderT SentryService
 
@@ -73,24 +76,18 @@ getLastEventId = do
 --
 captureEvent :: (HasSentry m) => Event -> m (Maybe EventId)
 captureEvent evt = do
-  traceM "captureEvent / top"
-  SentryService{svcTransport, svcDisabled, svcSampleRate, svcBeforeSend, svcScopeRef} <- getSentryService
-  traceM $ "capturEvent / svcDisabled = " <> show svcDisabled
+  SentryService{svcTransport, svcDisabled, svcSampleRate, svcBeforeSend, svcScopeRef, svcEventDefaults} <- getSentryService
   case svcDisabled of
-    True -> pure $ traceShow "disabled" Nothing
+    True -> pure Nothing
     False -> liftIO $ do
-      traceM "captureEvent / randomRIO"
       r :: Float <- randomRIO (0.0, 1.0)
 
-      traceM $ "captureEvent / svcSampleRate = " <> show r
       -- TODO: Debug logging in the case when event is discared?
       case (r < svcSampleRate) of
         False -> pure Nothing
         True -> do
-          traceM "captureEvent / readIORef"
           scope <- readIORef svcScopeRef
-          traceM "captureEvent / beforeSend"
-          svcBeforeSend (applyToEvent scope evt) >>= \case
+          svcBeforeSend (applyToEvent scope $ svcEventDefaults evt) >>= \case
             Just finalEvent -> svcTransport finalEvent
             Nothing -> pure Nothing
 
@@ -99,8 +96,7 @@ captureMessage :: (HasSentry m, StringConv msg String)
                -> LogLevel
                -> m (Maybe EventId)
 captureMessage msg ll = do
-  SentryService{svcMkBlankEvent} <- getSentryService
-  evt <- liftIO svcMkBlankEvent
+  evt <- mkBlankEvent
   captureEvent $ setMessage msg evt { evtLevel = ll }
 
 -- captureException
@@ -156,3 +152,31 @@ mergeExtra x s = s { scopeExtra = ScopeOpAdd x }
 
 setTransaction :: String -> Scope -> Scope
 setTransaction x s = s { scopeTransaction = ScopeOpReplace x }
+
+
+{-# INLINE mkBlankEvent #-}
+mkBlankEvent :: (HasCallStack, MonadIO m)
+             => m Event
+mkBlankEvent = do
+  (eid, t) <- liftIO $ (,) <$> UUID.nextRandom <*> getCurrentTime
+  -- applyDefaults <- svcEventDefaults <$> getSentryService
+  pure Event
+    { evtId = EventId eid
+    , evtTimestamp = t
+    , evtPlatform = PlatformHaskell
+    , evtLevel = Info
+    , evtLogger = Nothing
+    , evtTransaction = Nothing
+    , evtServerName = Nothing
+    , evtRelease = Nothing
+    , evtDist = Nothing
+    , evtTags = []
+    , evtEnvironment = Nothing
+    , evtModules = []
+    , evtExtra = []
+    , evtFingerprint = []
+    , evtMessage = Nothing
+    , evtException = []
+    , evtUser = Nothing
+    , evtRequest = Nothing
+    }

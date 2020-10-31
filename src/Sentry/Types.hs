@@ -87,33 +87,8 @@ data Event = Event
   , evtException :: ![SentryException]
   , evtUser :: !(Maybe User)
   , evtRequest :: !(Maybe SentryRequest)
-  } deriving (Show, Generic)
+  } deriving (Eq, Show, Generic)
 
-{-# INLINE mkBlankEvent #-}
-mkBlankEvent :: (HasCallStack, MonadIO m)
-             => m Event
-mkBlankEvent = do
-  (eid, t) <- liftIO $ (,) <$> UUID.nextRandom <*> getCurrentTime
-  pure Event
-    { evtId = EventId eid
-    , evtTimestamp = t
-    , evtPlatform = PlatformHaskell
-    , evtLevel = Info
-    , evtLogger = Nothing
-    , evtTransaction = Nothing
-    , evtServerName = Nothing
-    , evtRelease = Nothing
-    , evtDist = Nothing
-    , evtTags = []
-    , evtEnvironment = Nothing
-    , evtModules = []
-    , evtExtra = []
-    , evtFingerprint = []
-    , evtMessage = Nothing
-    , evtException = []
-    , evtUser = Nothing
-    , evtRequest = Nothing
-    }
 
 
 setMessage :: (StringConv msg String) => msg -> Event -> Event
@@ -385,12 +360,14 @@ instance Show ExceptionWithCallStack where
   show (ExceptionWithCallStack e st) = show e <> "\n" <> prettyCallStack st
 
 instance ToSentry ExceptionWithCallStack where
-  toSentry (ExceptionWithCallStack e st) = SentryException
-    { exExceptionType = Just $ show $ typeOf e
-    , exValue = Just $ displayException e
-    , exModuleName = Nothing
-    , exStacktrace = Just $ SentryStacktrace { stFrames = callStackToSentry st }
-    }
+  toSentry (ExceptionWithCallStack e st) =
+    let fr = callStackToSentry st
+    in SentryException
+       { exExceptionType = Just $ show $ typeOf e
+       , exValue = Just $ displayException e
+       , exModuleName = (listToMaybe fr) >>= frModule
+       , exStacktrace = Just $ SentryStacktrace { stFrames = fr }
+       }
 
 omitNothing :: (ToJSON v, Aeson.KeyValue kv) => T.Text -> Maybe v -> [kv]
 omitNothing k mv = case mv of
@@ -432,39 +409,42 @@ instance ToJSON User where
         Just x -> DL.map (\(k, v) -> k Aeson..= v) $
                   toList x
 
-newtype SentryRequest = SentryRequest { rawSentryRequest :: Wai.Request } deriving (Show)
+data SentryRequest = SentryRequest
+  { reqMethod :: !T.Text
+  , reqIsSecure :: !Bool
+  , reqPath :: !T.Text
+  , reqQueryString :: !T.Text
+  , reqHeaders :: ![(T.Text, T.Text)]
+  , reqHost :: !(Maybe T.Text)
+  , reqCookies :: !(Maybe T.Text)
+  } deriving (Eq, Show)
+
+fromWaiRequest :: Wai.Request -> SentryRequest
+fromWaiRequest req = SentryRequest
+  { reqMethod = toS $ Wai.requestMethod req
+  , reqIsSecure = Wai.isSecure req
+  , reqPath = toS $ Wai.rawPathInfo req
+  , reqQueryString = toS $ Wai.rawQueryString req
+  , reqHeaders = (DL.map (\(k, v) -> (toS $ CI.original k, toS v) :: (T.Text, T.Text)) $  Wai.requestHeaders req)
+  , reqHost = fmap toS $ Wai.requestHeaderHost req
+  , reqCookies = fmap toS $ DL.lookup hCookie (Wai.requestHeaders req)
+  }
 
 instance ToJSON SentryRequest where
-  toJSON SentryRequest{rawSentryRequest=r} = Aeson.object $ core <> cookies
-    where
-      url = (if Wai.isSecure r then "https://" else "http://") <>
-            (fromMaybe "unknown" $ Wai.requestHeaderHost r) <>
-            (Wai.rawPathInfo r)
-      core = [ "method" Aeson..= (toS $ Wai.requestMethod r :: T.Text)
-             , "url" Aeson..= (toS url :: T.Text)
-             , "query_string" Aeson..= (toS $ Wai.rawQueryString r :: T.Text)
-             , "headers" Aeson..= (DL.map (\(k, v) -> (toS $ CI.original k, toS v) :: (T.Text, T.Text)) $  Wai.requestHeaders r)
-             -- , "data" Aeson..= (toS $ Wai.strictRequestBody r)
-             -- , "env" Aeson..= _
-             ]
-      cookies = case DL.lookup hCookie (Wai.requestHeaders r) of
-        Nothing -> []
-        Just v -> [ "cookies" Aeson..= (toS v :: T.Text) ]
-      -- bodyData = case Wai.requestBody r of
-      --   Wai.RequestBodyLBS lbs -> bodyDataWithContentType (toS lbs)
-      --   Wai.RequestBodyBS bs -> bodyDataWithContentType (toS bs)
-      --   Wai.RequestBodyBuilder i _ -> [ "data" Aeson..= ("(RequestBodyBuilder of " <> show i <> " bytes") ]
-      --   Wai.RequestBodyStream i _ -> [ "data" Aeson..= ("(RequestBodyStream of " <> show i <> " bytes") ]
-      --   Wai.RequestBodyStreamChunked _ -> [ "data" Aeson..= ("(RequestBodyStreamChunked)" :: T.Text) ]
-      --   Wai.RequestBodyIO _ -> [ "data" Aeson..= ("(RequestBodyIO)" :: T.Text) ]
-      -- bodyDataWithContentType (d :: LT.Text) =
-      --   if d==mempty  then []  else [ "data" Aeson..= d ]
-        -- TODO: can we really do anything based on content-type here?
-          -- case DL.lookup hContentType (requestHeaders r) of
-          -- Nothing -> 
-          -- Just ct ->
-          --   if "json" `BS.isInfixOf` ct
-          --   then [ "data" Aeson..= ]
+  toJSON SentryRequest{..} = Aeson.object
+    [  "method" Aeson..= reqMethod
+    , "url" Aeson..= ((if reqIsSecure then "https://" else "http://") <>
+                      (fromMaybe "unknown" reqHost) <>
+                      reqPath)
+    , "query_string" Aeson..= reqQueryString
+    , "headers" Aeson..= reqHeaders
+    , "cookies" Aeson..= reqCookies
+      -- , "data" Aeson..= (toS $ Wai.strictRequestBody r)
+      -- , "env" Aeson..= _
+    ]
+
+
+
 -- "_level",
 -- "_name",
 -- "_fingerprint",
@@ -547,7 +527,7 @@ data SentryService = SentryService
   , svcSampleRate :: !Float
   , svcBeforeSend :: (Event -> IO (Maybe Event))
   , svcScopeRef :: !(IORef Scope)
-  , svcMkBlankEvent :: !(IO Event)
+  , svcEventDefaults :: !(Event -> Event)
   }
 
 stderrTransport :: Event
@@ -576,7 +556,7 @@ mkSentryService dsn applyDefaults transport = case parseURI laxURIParserOptions 
               , svcBeforeSend = pure . Just
               , svcTransport = transport svc
               , svcScopeRef = scopeRef
-              , svcMkBlankEvent = (mkBlankEvent >>= (pure . applyDefaults))
+              , svcEventDefaults = applyDefaults
               }
     pure svc
 

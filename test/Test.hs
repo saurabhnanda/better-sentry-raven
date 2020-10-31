@@ -19,7 +19,8 @@ import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Hedgehog.Gen.Generic
-import Sentry.Types
+import Sentry.Types as Sentry
+import qualified Sentry.Blank as Sentry
 import Data.UUID as UUID
 import Data.Time.Clock.POSIX
 import Data.Time
@@ -28,6 +29,7 @@ import Network.HTTP.Client.TLS
 import Network.HTTP.Client as HT
 import Network.HTTP.Types as HT
 import qualified Sentry.HTTP as Sentry
+import qualified Sentry.SentryT as Sentry
 import UnliftIO
 import Control.Concurrent (threadDelay)
 import Control.Monad (void)
@@ -35,6 +37,7 @@ import Debug.Trace
 import GHC.Stack
 import Lens.Micro
 import Lens.Micro.Aeson
+import Data.Aeson as Aeson
 import Data.Maybe
 import qualified Control.Retry as Retry
 import qualified Control.Monad.Catch as Catch
@@ -46,31 +49,37 @@ import Type.Reflection
 import GHC.Word
 import Data.String.Conv
 import qualified Data.CaseInsensitive as CI
+import Control.Monad.Reader
+import qualified Network.Wai as Wai
 -- import Data.Function ((&))
 -- import Data.UUID.V4
 
 
 data TestEnv = TestEnv
-  { envCfg :: !SentryConfig
+  { envService :: !SentryService
   , envTime :: !UTCTime
   }
+
+fallbackTransport :: Event -> SomeException -> IO (Maybe EventId)
+fallbackTransport evt e = do
+  putStrLn $ "Error: " <> show e <> "\n"
+  putStrLn $ "Payload: " <> (toS $ Aeson.encode evt)
+  pure Nothing
 
 main :: IO ()
 main = do
   mgr <- getGlobalManager
   envTime <- getCurrentTime
-  let envCfg = either error (\x -> x{cfgAuthToken=tkn, cfgOrgSlug=slug}) $
-            mkSentryConfig mgr "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1"
-      tkn = Just "19aece92cc484af5aa9f5c7c09128dca3ca87123070f4789bcd2b3e3f6e53f48"
-      slug = Just "sentry"
-      env = TestEnv{..}
+  envService <- Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" Prelude.id $
+                Sentry.mkHttpTransport mgr fallbackTransport
+  let env = TestEnv{..}
   defaultMain $
     testGroup "All tests"
-    [ testCase "List organizations" $ testListAllOrganizations env
-    -- , testCase "Resolve event Id" $ testResolveEventId env
-    -- , testCase "Event with stacktrace" $ testWithStacktrace env
+    [ testCase "Event with stacktrace" $ testWithStacktrace env
     , testCase "Event with user" $ testWithUser env
     , testCase "Event with wai request" $ testWithWaiRequest env
+    , testProperty "beforeSend" $ propApplyDefaults env
+    , testProperty "applyScope" $ propScope env
     -- , testProperty "Basic events" $ propBasicEvent env
     ]
 
@@ -140,9 +149,9 @@ genSentryStacktrace = do
 
 genSentryException :: (HasCallStack) => Gen SentryException
 genSentryException = do
-  exType <- Gen.maybe $ fmap ("TYPE: " <>) $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  exExceptionType <- Gen.maybe $ fmap ("TYPE: " <>) $ Gen.string (Range.linear 1 100) Gen.alphaNum
   exValue <- Gen.maybe $ fmap ("VALUE: " <>) $ Gen.string (Range.linear 1 100) Gen.alphaNum
-  exModule <- Gen.maybe $ fmap ("MOD: " <> ) $ Gen.string (Range.linear 1 100) Gen.alphaNum
+  exModuleName <- Gen.maybe $ fmap ("MOD: " <> ) $ Gen.string (Range.linear 1 100) Gen.alphaNum
   exStacktrace <- Gen.maybe genSentryStacktrace
   pure SentryException{..}
 
@@ -244,20 +253,77 @@ isProblematicEvent Event{..} =
   (evtFingerprint == []) &&
   (evtModules == [])
 
-propBasicEvent :: (HasCallStack) => TestEnv -> Property
-propBasicEvent TestEnv{..} = property $ do
+propScope :: (HasCallStack) => TestEnv -> Property
+propScope TestEnv{..} = property $ do
   evt <- forAll $ genBasicEvent envTime
-  r <- (evalIO $ Sentry.store envCfg evt) >>= tapAnnotateShow
-  case r ^? _Right . (key "id") . _String of
-    Nothing -> failure
-    Just _ -> success
+  scope <- forAll $ genScope False
+  evt === (Sentry.applyToEvent Sentry.blank evt)
+  if scope /= Sentry.blank then (Sentry.applyToEvent scope evt) /== evt else pure ()
+  (Sentry.applyToEvent scope (Sentry.applyToEvent scope evt)) === (Sentry.applyToEvent scope evt)
+
+propApplyDefaults :: (HasCallStack) => TestEnv -> Property
+propApplyDefaults TestEnv{..} = property $ do
+  (randEvt, overrideEvt) <- forAll $ do
+    (,) <$> genBasicEvent envTime <*> genBasicEvent envTime
+  ref <- newIORef []
+  svc <- liftIO $ Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" (const overrideEvt) $
+         (\_ evt -> modifyIORef' ref (\x -> evt:x) >> pure Nothing)
+  (flip runReaderT) svc $ do
+    void $ Sentry.captureEvent randEvt
+  readIORef ref >>= tapAnnotateShow >>= \case
+    [] -> annotate "No events captured" >> failure
+    [evt] -> evt === overrideEvt
+    _ -> annotate "Multipe events captured. Expecting only a single event" >> failure
+
+genScopeOp :: Bool -> Gen a -> Gen (ScopeOp a)
+genScopeOp addFlag g =
+  Gen.choice $
+  [ pure ScopeOpNothing
+  , pure ScopeOpRemove
+  , ScopeOpReplace <$> g
+  ] <> (if addFlag then [ScopeOpAdd <$> g] else [])
+
+genScope :: Bool -> Gen Scope
+genScope addFlag = Scope
+  <$> (g Gen.enumBounded)
+  <*> (g $ Gen.list (Range.linear 1 5) $ Gen.string (Range.linear 1 30) Gen.alphaNum)
+  <*> (g genUser)
+  <*> (g $ Gen.list (Range.linear 1 5) $ genKvp 5 30)
+  <*> (g $ Gen.list (Range.linear 1 5) $ genKvp 5 30)
+  <*> (g $ Gen.string (Range.linear 1 30) Gen.alphaNum)
+  <*> (pure Nothing)
+  where
+    g :: Gen a -> Gen (ScopeOp a)
+    g = genScopeOp addFlag
+-- propApplyScope :: (HasCallStack) => TestEnv -> Property
+-- propApplyScope TestEnv{..} = property $ do
+--   (randEvt, overrideEvt) <- forAll $ do
+--     (,) <$> genBasicEvent envTime <*> genBasicEvent envTime
+--   ref <- newIORef []
+--   svc <- liftIO $ Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" (const overrideEvt) $
+--          (\_ evt -> modifyIORef' ref (\x -> evt:x) >> pure Nothing)
+--   (flip runReaderT) svc $ do
+--     void $ Sentry.captureEvent randEvt
+--   readIORef ref >>= tapAnnotateShow >>= \case
+--     [] -> annotate "No events captured" >> failure
+--     [evt] -> evt === overrideEvt
+--     _ -> annotate "Multipe events captured. Expecting only a single event" >> failure
+
+
+-- propBasicEvent :: (HasCallStack) => TestEnv -> Property
+-- propBasicEvent TestEnv{..} = property $ do
+--   evt <- forAll $ genBasicEvent envTime
+--   r <- (evalIO $ Sentry.captureEvent envCfg evt) >>= tapAnnotateShow
+--   case r ^? _Right . (key "id") . _String of
+--     Nothing -> failure
+--     Just _ -> success
 
   -- case isProblematicEvent evt of
   --   True -> do
   --     traceM "discarded"
   --     discard
   --   False -> do
-  --     r <- (evalIO $ Sentry.store envCfg evt) >>= tapAnnotateShow
+  --     r <- (evalIO $ Sentry.captureEvent envCfg evt) >>= tapAnnotateShow
   --     case r ^? _Right . (key "id") . _String of
   --       Nothing -> failure
   --       Just _ -> do
@@ -273,19 +339,19 @@ propBasicEvent TestEnv{..} = property $ do
           --       mempty === x
           --       traceM "pass"
 
-testListAllOrganizations :: TestEnv -> IO ()
-testListAllOrganizations TestEnv{..} = do
-  void $ assertEitherM "Expecting a valid JSON" $ Sentry.listAllOrganizations envCfg
+-- testListAllOrganizations :: TestEnv -> IO ()
+-- testListAllOrganizations TestEnv{..} = do
+--   void $ assertEitherM "Expecting a valid JSON" $ Sentry.listAllOrganizations envCfg
 
-testResolveEventId :: TestEnv -> IO ()
-testResolveEventId TestEnv{..} = do
-  evt <- Gen.sample $ genBasicEvent envTime
-  resp <- Sentry.store envCfg evt
-  case resp ^? _Right . (key "id") . _String of
-    Nothing -> assertFailure "Expecting an event id in response"
-    Just eid -> void $ assertEitherM "Unexpected nonsense" $
-                retryOnTemporaryNetworkErrors (ignoreStatus [404, 429]) $
-                Sentry.resolveEventId envCfg (httpToEventId eid)
+-- testResolveEventId :: TestEnv -> IO ()
+-- testResolveEventId TestEnv{..} = do
+--   evt <- Gen.sample $ genBasicEvent envTime
+--   resp <- Sentry.captureEvent envCfg evt
+--   case resp ^? _Right . (key "id") . _String of
+--     Nothing -> assertFailure "Expecting an event id in response"
+--     Just eid -> void $ assertEitherM "Unexpected nonsense" $
+--                 retryOnTemporaryNetworkErrors (ignoreStatus [404, 429]) $
+--                 Sentry.resolveEventId envCfg (httpToEventId eid)
 
 ignoreStatus :: [Int] -> Status -> Bool
 ignoreStatus xs st = statusCode st `elem` xs
@@ -325,7 +391,7 @@ retryOnTemporaryNetworkErrors statusCodeHandler action =
         InvalidProxySettings _ -> pure False
 
 
-genWaiRequest :: Gen HT.Request
+genWaiRequest :: Gen Wai.Request
 genWaiRequest = do
   method_ <- Gen.element ["GET", "POST", "PUT", "HEAD", "DELETE"]
   host_ <- Gen.string (Range.linear 1 100) Gen.alphaNum
@@ -337,16 +403,20 @@ genWaiRequest = do
   mCookieHeader <- Gen.maybe $ (,)
                   <$> (pure hCookie)
                   <*> (fmap toS $ fmap (DL.intercalate "; ") $ genKvpAssignments 10 50)
+  mHostHeader <- Gen.maybe $ (,)
+                 <$> (pure $ "Host")
+                 <*> (fmap toS $ Gen.string (Range.linear 1 10) Gen.alphaNum)
   otherHeaders <- fmap (DL.map (\(k, v) -> (CI.mk $ toS k, toS v))) $
                   Gen.list (Range.linear 0 10) $
                   genKvp 10 50
-  pure defaultRequest { method = method_
-                      , host = toS host_
-                      , port = port_
-                      , path = toS path_
-                      , queryString = toS queryString_
-                      , requestHeaders = ((maybeToList mCookieHeader) <> otherHeaders)
-                      }
+  secure_ <- Gen.bool
+  pure Wai.defaultRequest { Wai.requestMethod = method_
+                          , Wai.httpVersion = HT.http11
+                          , Wai.rawPathInfo = toS path_
+                          , Wai.rawQueryString = toS queryString_
+                          , Wai.requestHeaders = ((maybeToList mCookieHeader) <> otherHeaders <> (maybeToList mHostHeader))
+                          , Wai.isSecure = secure_
+                          }
 
 throwWithStack :: (MonadIO m, HasCallStack, Exception e) => e -> m a
 throwWithStack e = UnliftIO.throwIO $ ExceptionWithCallStack e callStack
@@ -367,23 +437,69 @@ foo2 = UnliftIO.catch (foo 0) handler
     handler x = do
       putStrLn $ show $ toSentry x
 
-testWithStacktrace :: TestEnv -> IO ()
+withLocalTransport :: Sentry.SentryT IO a
+                   -> IO (IORef [Event], a)
+withLocalTransport action = do
+  ref <- newIORef []
+  svc <- Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" Prelude.id $
+         (\_ evt -> modifyIORef' ref (\x -> evt:x) >> pure Nothing)
+  (,) <$> (pure ref) <*> (runReaderT action svc)
+
+assertFieldPresent :: (Show a, HasCallStack)
+                   => String
+                   -> (a -> Maybe b)
+                   -> a
+                   -> Assertion
+assertFieldPresent msg accessor record =
+  assertBool ("Unexpection Nothing - " <> msg <> ": " <> show record) $ isJust (accessor record)
+
+assertSingle :: (HasCallStack, Show a) => String -> [a] -> IO a
+assertSingle msg xs = case xs of
+  [] -> assertFailure (msg <> ": unexpected empty list")
+  [x] -> pure x
+  _ -> assertFailure (msg <> ": not expecting more than one element: " <> show xs)
+
+testWithStacktrace :: HasCallStack => TestEnv -> IO ()
 testWithStacktrace TestEnv{..} = do
   evt <- Gen.sample $ genBasicEvent envTime
-  UnliftIO.catch (foo 0) $ \(e :: ExceptionWithCallStack) ->
-    void $ assertEitherM "error while storing event" $
-    Sentry.store envCfg evt{ evtException = [toSentry e] }
+  (ref, _) <- withLocalTransport $ do
+    UnliftIO.catch (liftIO $ foo 0) $ \(e :: ExceptionWithCallStack) -> do
+      void $ Sentry.captureEvent evt{ evtException = [toSentry e] }
+  readIORef ref >>= \case
+    [] -> assertFailure "Event not captured"
+    [Event{..}] -> do
+      case evtException of
+        [] -> assertFailure "Event should have exception"
+        [ex] -> do
+          assertFieldPresent "SentryException.exExceptionType" exExceptionType ex
+          assertFieldPresent "SentryException.exModuleName" exModuleName ex
+          case (exStacktrace ex) of
+            Nothing -> assertFailure "SentryException should have exStacktrace"
+            Just st -> case stFrames st of
+              [] -> assertFailure "Stacktrace should have frames"
+              _ -> forM_ (stFrames st) $ \fr-> do
+                assertFieldPresent "Frame.frFilename" frFilename fr
+                assertFieldPresent "Frame.frFunction" frFunction fr
+                assertFieldPresent "Frame.frModule " frModule fr
+                assertFieldPresent "Frame.frLineno" frLineno fr
+                assertFieldPresent "Frame.frColno" frColno fr
+                assertFieldPresent "Frame.frPackage" frPackage fr
+        x -> assertFailure $ "How did more than one exception get capture? " <> show x
+    x -> assertFailure $ "More than one event captured: " <> show x
 
 testWithUser :: TestEnv -> IO ()
 testWithUser TestEnv{..} = do
   evt <- Gen.sample $ genBasicEvent envTime
   user <- Gen.sample genUser
-  void $ assertEitherM "error while storing event" $
-    Sentry.store envCfg evt{ evtUser = Just user }
+  (ref, _) <- withLocalTransport $ do
+    Sentry.captureEvent evt{ evtUser = Just user }
+  evt <- readIORef ref >>= assertSingle "Captured events"
+  assertFieldPresent "Event.evtUser" evtUser evt
 
 testWithWaiRequest :: TestEnv -> IO ()
 testWithWaiRequest TestEnv{..} = do
   evt <- Gen.sample $ genBasicEvent envTime
   req <- Gen.sample genWaiRequest
-  void $ assertEitherM "error while storing event" $
-    Sentry.store envCfg evt{ evtRequest = Just $ SentryRequest req }
+  (ref, _) <- withLocalTransport $ do
+    Sentry.captureEvent evt{ evtRequest = Just $ Sentry.fromWaiRequest req }
+  readIORef ref >>= (assertSingle "Expecting a single event") >>= assertFieldPresent "Event.evtRequest" evtRequest
