@@ -98,11 +98,11 @@ captureLog loc ls ll msg = do
   evt <- mkBlankEvent
   traceM "captureLog / captureEvent"
   captureEvent $
-    -- defaultSetLoc loc $
-    -- defaultSetStacktrace callStack $
-    -- setMessage (FL.fromLogStr $ ML.toLogStr msg) $
-    -- set L.logger (Just $ toS ls) $
-    -- set L.level ll $
+    defaultSetLoc loc $
+    defaultSetStacktrace callStack $
+    setMessage (FL.fromLogStr $ ML.toLogStr msg) $
+    set L.logger (Just $ toS ls) $
+    set L.level ll $
     evt
 
 
