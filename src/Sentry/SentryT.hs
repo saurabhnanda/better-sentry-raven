@@ -74,27 +74,27 @@ getLastEventId = do
 --      can discard the event if it does not have a valid DSN; its internal
 --      queue is full; or due to rate limiting, as requested by the server.
 --
-captureEvent :: (HasSentry m) => Event -> m (Maybe EventId)
+captureEvent :: (HasSentry m) => Event -> m ()
 captureEvent evt = do
   SentryService{svcTransport, svcDisabled, svcSampleRate, svcBeforeSend, svcScopeRef, svcEventDefaults} <- getSentryService
   case svcDisabled of
-    True -> pure Nothing
+    True -> pure ()
     False -> liftIO $ do
       r :: Float <- randomRIO (0.0, 1.0)
 
       -- TODO: Debug logging in the case when event is discared?
       case (r < svcSampleRate) of
-        False -> pure Nothing
+        False -> pure ()
         True -> do
           scope <- readIORef svcScopeRef
           svcBeforeSend (applyToEvent scope $ svcEventDefaults evt) >>= \case
             Just finalEvent -> svcTransport finalEvent
-            Nothing -> pure Nothing
+            Nothing -> pure ()
 
 captureMessage :: (HasSentry m, StringConv msg String)
                => msg
                -> LogLevel
-               -> m (Maybe EventId)
+               -> m ()
 captureMessage msg ll = do
   evt <- mkBlankEvent
   captureEvent $ setMessage msg evt { evtLevel = ll }

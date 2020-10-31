@@ -522,7 +522,7 @@ data SentryService = SentryService
   , svcKey :: !BS.ByteString
   , svcSecret :: !(Maybe BS.ByteString)
   , svcProjectId :: !BS.ByteString
-  , svcTransport :: (Event -> IO (Maybe EventId))
+  , svcTransport :: (Event -> IO ())
   , svcDisabled :: !Bool
   , svcSampleRate :: !Float
   , svcBeforeSend :: (Event -> IO (Maybe Event))
@@ -539,7 +539,7 @@ stderrTransport evt = do
 mkSentryService :: HasCallStack
                 => BS.ByteString
                 -> (Event -> Event)
-                -> (SentryService -> Event -> IO (Maybe EventId))
+                -> (SentryService -> Event -> IO ())
                 -> IO SentryService
 mkSentryService dsn applyDefaults transport = case parseURI laxURIParserOptions dsn of
   Left e -> error $ show e

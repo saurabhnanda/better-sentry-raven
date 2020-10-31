@@ -25,6 +25,8 @@ import UnliftIO
 import qualified Data.List as DL
 import Data.Maybe
 import Data.String.Conv
+import Control.Concurrent (forkIO)
+import Control.Monad (void)
 
 -- data HttpConfig = HttpConfig
 --   { cfgManager :: !Manager
@@ -39,12 +41,14 @@ import Data.String.Conv
 --   -- let cfgBaseRequest =
 --   pure $ overrideFn HttpConfig{..}
 
+
 mkHttpTransport :: (HasCallStack, Exception e)
-                => Manager
-                -> (Event -> e -> IO (Maybe EventId))
+                => Bool
+                -> Manager
+                -> (Event -> e -> IO ())
                 -> SentryService
-                -> (Event -> IO (Maybe EventId))
-mkHttpTransport mgr fallbackTransport SentryService{..} =
+                -> (Event -> IO ())
+mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} =
   let authComponents = [ ("sentry_version", "7")
                        , ("sentry_client", "better_haskell_raven/1.0")
                        -- TODO: send the timestamp, or not?
@@ -72,8 +76,10 @@ mkHttpTransport mgr fallbackTransport SentryService{..} =
         let req = baseReq { requestBody = RequestBodyLBS (Aeson.encode evt) }
         (fmap (Aeson.eitherDecode . responseBody) $ httpLbs req mgr) >>= \case
           Left e -> throwString e
-          Right (r :: Aeson.Value) -> pure $ fmap httpToEventId $ r ^? key "id" . _String
-  in transport
+          Right (r :: Aeson.Value) -> pure ()
+  in if asyncFlag
+     then void . forkIO . transport
+     else transport
 
 -- store :: (HasCallStack)
 --       => SentryConfig

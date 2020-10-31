@@ -92,11 +92,9 @@ captureLog :: (HasCallStack, ToLogStr msg, HasSentry m)
              -> LogSource
              -> Sentry.LogLevel
              -> msg
-             -> m (Maybe EventId)
+             -> m ()
 captureLog loc ls ll msg = do
-  traceM "captureLog / mkBlankEvent"
   evt <- mkBlankEvent
-  traceM "captureLog / captureEvent"
   captureEvent $
     defaultSetLoc loc $
     defaultSetStacktrace callStack $
