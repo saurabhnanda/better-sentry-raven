@@ -75,7 +75,7 @@ main = do
   let env = TestEnv{..}
   defaultMain $
     testGroup "All tests"
-    [ testCase "Event with stacktrace" $ testWithStacktrace env
+    [ testCase "Event with stacktrace" $ testWithExceptionStacktrace env
     , testCase "Event with user" $ testWithUser env
     , testCase "Event with wai request" $ testWithWaiRequest env
     , testProperty "beforeSend" $ propApplyDefaults env
@@ -459,8 +459,8 @@ assertSingle msg xs = case xs of
   [x] -> pure x
   _ -> assertFailure (msg <> ": not expecting more than one element: " <> show xs)
 
-testWithStacktrace :: HasCallStack => TestEnv -> IO ()
-testWithStacktrace TestEnv{..} = do
+testWithExceptionStacktrace :: HasCallStack => TestEnv -> IO ()
+testWithExceptionStacktrace TestEnv{..} = do
   evt <- Gen.sample $ genBasicEvent envTime
   (ref, _) <- withLocalTransport $ do
     UnliftIO.catch (liftIO $ foo 0) $ \(e :: ExceptionWithCallStack) -> do

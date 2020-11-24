@@ -87,6 +87,7 @@ data Event = Event
   , evtException :: ![SentryException]
   , evtUser :: !(Maybe User)
   , evtRequest :: !(Maybe SentryRequest)
+  , evtThreads :: ![SentryThread]
   } deriving (Eq, Show, Generic)
 
 
@@ -182,7 +183,7 @@ data SentryException = SentryException
   -- , exRegisters :: ![(String, String)]
   } deriving (Eq, Show, Generic, Blank)
 
-type ThreadId = String
+type SentryThreadId = String
 
 
 instance ToJSON SentryException where
@@ -205,13 +206,26 @@ instance ToJSON SentryException where
 --     , "stacktrace" Aeson..= exStacktrace
 --     ]
 
--- data SentryThread = SentryThread
---   { thId :: !ThreadId
---   , thCrashed :: !(Maybe Boolean)
---   , thCurrent :: !(Maybe Boolean)
---   , thName :: !(Maybe String)
---   , thStacktrace :: !(Maybe SentryStacktrace)
---   }
+data SentryThread = SentryThread
+  { thId :: !SentryThreadId
+  , thCrashed :: !(Maybe Bool)
+  , thCurrent :: !(Maybe Bool)
+  , thName :: !(Maybe String)
+  , thStacktrace :: !(Maybe SentryStacktrace)
+  } deriving (Eq, Show, Generic)
+
+instance ToJSON SentryThread where
+  toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
+
+instance Blank (SentryThreadId -> SentryThread) where
+  blank = \tid -> SentryThread
+    { thId = tid
+    , thCrashed = Nothing
+    , thCurrent = Nothing
+    , thName = Nothing
+    , thStacktrace = Nothing
+    }
+
 
 data SentryStacktrace = SentryStacktrace
   { stFrames :: ![Frame]

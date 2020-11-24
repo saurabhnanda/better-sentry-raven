@@ -179,4 +179,5 @@ mkBlankEvent = do
     , evtException = []
     , evtUser = Nothing
     , evtRequest = Nothing
+    , evtThreads = []
     }

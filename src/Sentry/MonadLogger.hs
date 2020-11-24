@@ -72,11 +72,22 @@ locToFrame l  = Frame
   , frPackage = Just $ ML.loc_package l
   }
 
-defaultSetStacktrace :: (HasCallStack) => CallStack -> Event -> Event
-defaultSetStacktrace cs evt =
+defaultSetExceptionStacktrace :: (HasCallStack) => CallStack -> Event -> Event
+defaultSetExceptionStacktrace cs evt =
   let baseException = fromMaybe blank $ listToMaybe $ evtException evt
       baseStacktrace = fromMaybe blank (exStacktrace baseException)
   in evt { evtException = [ baseException { exStacktrace = Just baseStacktrace { stFrames = callStackToSentry cs } } ] }
+
+setThreadStacktrace :: (HasCallStack)
+                    => SentryThreadId
+                    -> CallStack
+                    -> Event
+                    -> Event
+setThreadStacktrace tid cs evt =
+  let baseThread = fromMaybe (blank tid) $ listToMaybe $ evtThreads evt
+      baseStacktrace = fromMaybe blank (thStacktrace baseThread)
+  in evt { evtThreads = [ baseThread { thStacktrace = Just baseStacktrace { stFrames = callStackToSentry cs } } ] }
+
 
 -- defaultLogToSentryEvent :: (HasCallStack, ToLogStr msg) => Loc -> LogSource -> Sentry.LogLevel -> msg -> m Event
 -- defaultLogToSentryEvent loc ls ll msg =
@@ -88,16 +99,17 @@ defaultSetStacktrace cs evt =
 --   (liftM3 mkBlank) (EventId <$> UUID.nextRandom) getCurrentTime (pure ll)
 
 captureLog :: (HasCallStack, ToLogStr msg, HasSentry m)
-             => Loc
-             -> LogSource
-             -> Sentry.LogLevel
-             -> msg
-             -> m ()
-captureLog loc ls ll msg = do
+           => SentryThreadId
+           -> Loc
+           -> LogSource
+           -> Sentry.LogLevel
+           -> msg
+           -> m ()
+captureLog tid loc ls ll msg = do
   evt <- mkBlankEvent
   captureEvent $
     defaultSetLoc loc $
-    defaultSetStacktrace callStack $
+    setThreadStacktrace tid callStack $
     setMessage (FL.fromLogStr $ ML.toLogStr msg) $
     set L.logger (Just $ toS ls) $
     set L.level ll $
