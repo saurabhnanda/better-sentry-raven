@@ -146,7 +146,8 @@ instance ToJSON Event where
     , "user" .= evtUser
     , "request" .= evtRequest
     ] <>
-    (if DL.null evtException then [] else [ "exception" .= Aeson.object [ "values" Aeson..= evtException ] ])
+    (if DL.null evtException then [] else [ "exception" .= Aeson.object [ "values" Aeson..= evtException ] ]) <>
+    (if DL.null evtThreads then [] else [ "threads" .= Aeson.object [ "values" Aeson..= evtThreads ] ])
     where
       kvpJson kvps = Aeson.object $ DL.map (\(k, v) -> (toS k) .= v) kvps
 

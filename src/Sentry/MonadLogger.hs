@@ -54,13 +54,22 @@ defaultLogFilter ll = case ll of
 --     Nothing -> pure ()
 --   originalFn loc ls ll msg
 
-defaultSetLoc :: (HasCallStack) => Loc -> Event -> Event
-defaultSetLoc loc evt =
+setExceptionLoc :: (HasCallStack) => Loc -> Event -> Event
+setExceptionLoc loc evt =
   if loc==ML.defaultLoc
   then evt
   else let baseException = fromMaybe blank $ listToMaybe $ evtException evt
            baseStacktrace = fromMaybe blank (exStacktrace baseException)
        in evt { evtException = [ baseException { exStacktrace = Just baseStacktrace { stFrames =  (locToFrame loc):(stFrames baseStacktrace) } } ] }
+
+setThreadLoc :: (HasCallStack) => SentryThreadId -> Loc -> Event -> Event
+setThreadLoc tid loc evt =
+  if loc==ML.defaultLoc
+  then evt
+  else let baseThread = fromMaybe (blank tid) $ listToMaybe $ evtThreads evt
+           baseStacktrace = fromMaybe blank (thStacktrace baseThread)
+       in evt { evtThreads = [ baseThread { thStacktrace = Just baseStacktrace { stFrames =  (locToFrame loc):(stFrames baseStacktrace) } } ] }
+
 
 locToFrame :: Loc -> Frame
 locToFrame l  = Frame
@@ -72,8 +81,8 @@ locToFrame l  = Frame
   , frPackage = Just $ ML.loc_package l
   }
 
-defaultSetExceptionStacktrace :: (HasCallStack) => CallStack -> Event -> Event
-defaultSetExceptionStacktrace cs evt =
+setExceptionStacktrace :: (HasCallStack) => CallStack -> Event -> Event
+setExceptionStacktrace cs evt =
   let baseException = fromMaybe blank $ listToMaybe $ evtException evt
       baseStacktrace = fromMaybe blank (exStacktrace baseException)
   in evt { evtException = [ baseException { exStacktrace = Just baseStacktrace { stFrames = callStackToSentry cs } } ] }
@@ -98,6 +107,8 @@ setThreadStacktrace tid cs evt =
 --   fmap (set L.logger (Just $ toS ls)) $
 --   (liftM3 mkBlank) (EventId <$> UUID.nextRandom) getCurrentTime (pure ll)
 
+-- TODO: We need two variants here - captureLog and captureLogWithStacktrace (along with ThreadId)
+
 captureLog :: (HasCallStack, ToLogStr msg, HasSentry m)
            => SentryThreadId
            -> Loc
@@ -108,7 +119,7 @@ captureLog :: (HasCallStack, ToLogStr msg, HasSentry m)
 captureLog tid loc ls ll msg = do
   evt <- mkBlankEvent
   captureEvent $
-    defaultSetLoc loc $
+    setThreadLoc tid loc $
     setThreadStacktrace tid callStack $
     setMessage (FL.fromLogStr $ ML.toLogStr msg) $
     set L.logger (Just $ toS ls) $

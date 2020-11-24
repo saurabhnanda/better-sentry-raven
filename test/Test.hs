@@ -60,18 +60,17 @@ data TestEnv = TestEnv
   , envTime :: !UTCTime
   }
 
-fallbackTransport :: Event -> SomeException -> IO (Maybe EventId)
+fallbackTransport :: Event -> SomeException -> IO ()
 fallbackTransport evt e = do
   putStrLn $ "Error: " <> show e <> "\n"
   putStrLn $ "Payload: " <> (toS $ Aeson.encode evt)
-  pure Nothing
 
 main :: IO ()
 main = do
   mgr <- getGlobalManager
   envTime <- getCurrentTime
   envService <- Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" Prelude.id $
-                Sentry.mkHttpTransport mgr fallbackTransport
+                Sentry.mkHttpTransport True mgr fallbackTransport
   let env = TestEnv{..}
   defaultMain $
     testGroup "All tests"
@@ -193,6 +192,7 @@ genBasicEvent curTime = do
   let evtException = []
       evtUser = Nothing
       evtRequest = Nothing
+      evtThreads = []
   pure Event{..}
 
 genEventWithException :: (HasCallStack) => UTCTime -> Gen Event
@@ -267,7 +267,7 @@ propApplyDefaults TestEnv{..} = property $ do
     (,) <$> genBasicEvent envTime <*> genBasicEvent envTime
   ref <- newIORef []
   svc <- liftIO $ Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" (const overrideEvt) $
-         (\_ evt -> modifyIORef' ref (\x -> evt:x) >> pure Nothing)
+         (\_ evt -> void $ modifyIORef' ref (\x -> evt:x))
   (flip runReaderT) svc $ do
     void $ Sentry.captureEvent randEvt
   readIORef ref >>= tapAnnotateShow >>= \case
@@ -442,7 +442,7 @@ withLocalTransport :: Sentry.SentryT IO a
 withLocalTransport action = do
   ref <- newIORef []
   svc <- Sentry.mkSentryService "http://edd7aa040752461e9f434724deb3dd03@168.119.172.134:9000/1" Prelude.id $
-         (\_ evt -> modifyIORef' ref (\x -> evt:x) >> pure Nothing)
+         (\_ evt -> void $ modifyIORef' ref (\x -> evt:x))
   (,) <$> (pure ref) <*> (runReaderT action svc)
 
 assertFieldPresent :: (Show a, HasCallStack)
