@@ -347,6 +347,7 @@ callStackToSentry cs = DL.reverse $ (flip DL.map) (getCallStack cs) $ \(fnName, 
   , frLineno = Just srcLocStartLine
   , frColno = Just srcLocStartCol
   , frPackage = Just srcLocPackage
+  -- , frInApp = Just False
   }
 
 class (Exception e) => ToSentry e where
@@ -485,6 +486,27 @@ data ScopeOp a = ScopeOpAdd a
 instance Blank (ScopeOp a) where
   blank = ScopeOpNothing
 
+class MergeScopeOp a where
+  mergeScopeOp :: ScopeOp a -> ScopeOp a -> ScopeOp a
+
+instance MergeScopeOp a where
+  mergeScopeOp s1 s2 = case s2 of
+    ScopeOpAdd a -> ScopeOpAdd a
+    ScopeOpReplace a -> ScopeOpReplace a
+    ScopeOpRemove -> ScopeOpRemove
+    ScopeOpNothing -> s1
+
+instance {-# OVERLAPS #-} MergeScopeOp [a] where
+  mergeScopeOp s1 s2 = case s2 of
+    ScopeOpAdd a -> case s1 of
+      ScopeOpAdd b -> ScopeOpAdd $ a <> b
+      ScopeOpReplace _ -> ScopeOpAdd a
+      ScopeOpRemove -> ScopeOpAdd a
+      ScopeOpNothing -> ScopeOpAdd a
+    ScopeOpReplace a -> ScopeOpReplace a
+    ScopeOpRemove -> ScopeOpRemove
+    ScopeOpNothing -> s1
+
 class ApplyScopeOp a b where
   applyScopeOp :: a -> ScopeOp b -> a
 
@@ -528,9 +550,6 @@ data Scope = Scope
   -- TODO
   --, scopeContexts ::
   } deriving (Eq, Show, Generic, Blank)
-
-data Breadcrumb = Breadcrumb {}
-
 
 data SentryService = SentryService
   { svcDsn :: !(URIRef Absolute)

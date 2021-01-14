@@ -79,6 +79,7 @@ main = do
     , testCase "Event with wai request" $ testWithWaiRequest env
     , testProperty "beforeSend" $ propApplyDefaults env
     , testProperty "applyScope" $ propScope env
+    , testProperty "configureScope" $ propConfigureScope env
     -- , testProperty "Basic events" $ propBasicEvent env
     ]
 
@@ -503,3 +504,36 @@ testWithWaiRequest TestEnv{..} = do
   (ref, _) <- withLocalTransport $ do
     Sentry.captureEvent evt{ evtRequest = Just $ Sentry.fromWaiRequest req }
   readIORef ref >>= (assertSingle "Expecting a single event") >>= assertFieldPresent "Event.evtRequest" evtRequest
+
+propConfigureScope :: (HasCallStack) => TestEnv -> Property
+propConfigureScope TestEnv{..} = property $ do
+  evt <- forAll $ genBasicEvent envTime
+  scope <- forAll $ genScope False
+  (ref, _) <- liftIO $ withLocalTransport $ do
+    Sentry.configureScope (const scope)
+    Sentry.captureEvent evt
+  (readIORef ref) >>= tapAnnotateShow >>= \case
+    [] -> annotate "No evets captured" >> failure
+    [evt2] -> Sentry.applyToEvent scope evt === evt2
+    _ -> annotate "Multiple events captured. Expecting only a single event" >> failure
+
+-- propWithScope :: (HasCallStack) => TestEnv -> Property
+-- propWithScope TestEnv{..} = property $ do
+--   where
+--     withScopeRecur n =
+--       if n==0
+--       then pure ()
+--       else do scope <- forAll $ genScope False
+--               Sentry.withScope (const scope) $ do
+--                 Sentry.captureEvent 
+
+--         withScopeRecur (n - 1)
+--   let withScopeRecur n = 
+--   scope <- forAll $ genScope False
+--   (ref, _) <- liftIO $ withLocalTransport $ do
+--     Sentry.configureScope (const scope)
+--     Sentry.captureEvent evt
+--   (readIORef ref) >>= tapAnnotateShow >>= \case
+--     [] -> annotate "No evets captured" >> failure
+--     [evt2] -> Sentry.applyToEvent scope evt === evt2
+--     _ -> annotate "Multiple events captured. Expecting only a single event" >> failure

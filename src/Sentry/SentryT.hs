@@ -132,11 +132,14 @@ setLevel x s = s { scopeLevel = ScopeOpReplace x }
 setFingerprint :: [String] -> Scope -> Scope
 setFingerprint x s = s { scopeFingerprint = ScopeOpReplace x }
 
+addFingerprint :: [String] -> Scope -> Scope
+addFingerprint x s = s { scopeFingerprint = mergeScopeOp (scopeFingerprint s) (ScopeOpAdd x) }
+
 setUser :: User -> Scope -> Scope
 setUser x s = s { scopeUser = ScopeOpReplace x }
 
-mergeUser :: User -> Scope -> Scope
-mergeUser x s = s { scopeUser = ScopeOpAdd x }
+-- mergeUser :: User -> Scope -> Scope
+-- mergeUser x s = s { scopeUser = ScopeOpAdd x }
 
 setTags :: [(String, String)] -> Scope -> Scope
 setTags x s = s { scopeTags = ScopeOpReplace x }
@@ -145,10 +148,10 @@ setExtra :: [(String, String)] -> Scope -> Scope
 setExtra x s = s { scopeExtra = ScopeOpReplace x }
 
 mergeTags :: [(String, String)] -> Scope -> Scope
-mergeTags x s = s { scopeTags = ScopeOpAdd x }
+mergeTags x s = s { scopeTags = mergeScopeOp (scopeTags s) (ScopeOpAdd x) }
 
 mergeExtra :: [(String, String)] -> Scope -> Scope
-mergeExtra x s = s { scopeExtra = ScopeOpAdd x }
+mergeExtra x s = s { scopeExtra = mergeScopeOp (scopeExtra s) (ScopeOpAdd x) }
 
 setTransaction :: String -> Scope -> Scope
 setTransaction x s = s { scopeTransaction = ScopeOpReplace x }
@@ -181,3 +184,36 @@ mkBlankEvent = do
     , evtRequest = Nothing
     , evtThreads = []
     }
+
+whenEnabled :: (HasCallStack, HasSentry m)
+            => m a
+            -> m ()
+whenEnabled action = do
+  SentryService{svcDisabled} <- getSentryService
+  case svcDisabled of
+    True -> pure ()
+    False -> void action 
+
+configureScope :: (HasCallStack, HasSentry m)
+               => (Scope -> Scope)
+               -> m ()
+configureScope fn = do
+  SentryService{svcScopeRef, svcDisabled} <- getSentryService
+  case svcDisabled of
+    True -> pure ()
+    False -> atomicModifyIORef' svcScopeRef $ \scope -> (fn scope, ())
+
+withScope :: (HasCallStack, HasSentry m, MonadUnliftIO m)
+          => (Scope -> Scope)
+          -> m a
+          -> m a
+withScope fn action = do
+  SentryService{svcScopeRef, svcDisabled} <- getSentryService
+  case svcDisabled of
+    True -> action
+    False -> do
+      let createNewScope = atomicModifyIORef' svcScopeRef $ \scope ->
+            let newScope = fn scope
+            in (newScope, scope)
+          restoreScope oldScope = writeIORef svcScopeRef oldScope
+      bracket createNewScope restoreScope (const action)
