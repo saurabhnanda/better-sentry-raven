@@ -46,8 +46,8 @@ mkHttpTransport :: (HasCallStack, Exception e)
                 -> Manager
                 -> (Event -> e -> IO ())
                 -> SentryService
-                -> IO (Event -> IO ())
-mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} = do
+                -> (Event -> IO ())
+mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} =
   let authComponents = [ ("sentry_version", "7")
                        , ("sentry_client", "better_haskell_raven/1.0")
                        -- TODO: send the timestamp, or not?
@@ -58,23 +58,24 @@ mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} = do
                    DL.map (\(k, v) -> k <> "=" <> v) authComponents
       -- secret = cfgDsn ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL
 
-  r <- HTTP.parseRequest $ toS svcDsn
-  let baseReq = r { path = "/api/" <> svcProjectId <> "/store/"
-                  , requestHeaders = [ (hContentType, "application/json")
-                                     , (hAccept, "application/json")
-                                     , ("X-Sentry-Auth", "Sentry " <> authString)
-                                     ]
-                  , checkResponse = throwErrorStatusCodes
-                  }
+      baseReq = case HTTP.parseRequest $ toS svcDsn of
+        Left (e :: SomeException) -> error $ "Error in parsing the Sentry DSN: " <> show e
+        Right r -> r { path = "/api/" <> svcProjectId <> "/store/"
+                     , requestHeaders = [ (hContentType, "application/json")
+                                        , (hAccept, "application/json")
+                                        , ("X-Sentry-Auth", "Sentry " <> authString)
+                                        ]
+                     , checkResponse = throwErrorStatusCodes
+                     }
       -- TODO: Handle rate-limiting?
       transport evt = (flip catch) (fallbackTransport evt) $ do
         let req = baseReq { requestBody = RequestBodyLBS (Aeson.encode evt) }
         (fmap (Aeson.eitherDecode . responseBody) $ httpLbs req mgr) >>= \case
           Left e -> throwString e
           Right (r :: Aeson.Value) -> pure ()
-  case asyncFlag of
-    True -> pure $ void . forkIO . transport
-    False -> pure transport
+  in case asyncFlag of
+    True -> void . forkIO . transport
+    False -> transport
 
 -- store :: (HasCallStack)
 --       => SentryConfig
