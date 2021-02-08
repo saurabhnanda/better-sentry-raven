@@ -70,9 +70,7 @@ mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} =
       -- TODO: Handle rate-limiting?
       transport evt = (flip catch) (fallbackTransport evt) $ do
         let req = baseReq { requestBody = RequestBodyLBS (Aeson.encode evt) }
-        (fmap (Aeson.eitherDecode . responseBody) $ httpLbs req mgr) >>= \case
-          Left e -> throwString e
-          Right (r :: Aeson.Value) -> pure ()
+        void $ httpLbs req mgr
   in case asyncFlag of
     True -> void . forkIO . transport
     False -> transport
