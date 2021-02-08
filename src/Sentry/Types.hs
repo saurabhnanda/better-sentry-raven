@@ -47,6 +47,9 @@ import qualified Network.Wai as Wai
 newtype EventId = EventId { rawEventId :: UUID } deriving (Eq, Show, Generic)
 -- newtype OrgSlug = OrgSlug { rawOrgSlug :: BS.ByteString } deriving (Eq, Show, Generic, FromJSON, ToJSON)
 -- newtype AuthToken = AuthToken { rawAuthToken :: BS.ByteString } deriving (Eq, Show, Generic, FromJSON, ToJSON)
+myAesonPrefix :: (String -> String) -> Aeson.Options
+myAesonPrefix fn = (Casing.aesonPrefix fn) { Aeson.omitNothingFields = True }
+
 
 instance ToJSON EventId where
   toJSON x = toJSON $ DL.filter (/= '-') $ show $ rawEventId x
@@ -188,7 +191,7 @@ type SentryThreadId = String
 
 
 instance ToJSON SentryException where
-  toJSON = (genericToJSON (Casing.aesonPrefix Casing.snakeCase))
+  toJSON = (genericToJSON (myAesonPrefix Casing.snakeCase))
     -- where
     --   overrides :: Aeson.Value -> Aeson.Value
     --   overrides v =
@@ -216,7 +219,7 @@ data SentryThread = SentryThread
   } deriving (Eq, Show, Generic)
 
 instance ToJSON SentryThread where
-  toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
+  toJSON = genericToJSON (myAesonPrefix Casing.snakeCase)
 
 instance Blank (SentryThreadId -> SentryThread) where
   blank = \tid -> SentryThread
@@ -234,7 +237,7 @@ data SentryStacktrace = SentryStacktrace
   } deriving (Eq, Show, Generic, Blank)
 
 instance ToJSON SentryStacktrace where
-  toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
+  toJSON = genericToJSON (myAesonPrefix Casing.snakeCase)
 
 data Frame = Frame
   { frFilename :: !(Maybe FilePath)
@@ -257,7 +260,7 @@ data Frame = Frame
   } deriving (Eq, Show, Generic, Blank)
 
 instance ToJSON Frame where
-  toJSON = genericToJSON (Casing.aesonPrefix Casing.snakeCase)
+  toJSON = genericToJSON (myAesonPrefix Casing.snakeCase)
 
 data Message = Message
   { msgFormatted :: !(Maybe String)
@@ -552,7 +555,7 @@ data Scope = Scope
   } deriving (Eq, Show, Generic, Blank)
 
 data SentryService = SentryService
-  { svcDsn :: !(URIRef Absolute)
+  { svcDsn :: !BS.ByteString
   , svcKey :: !BS.ByteString
   , svcSecret :: !(Maybe BS.ByteString)
   , svcProjectId :: !BS.ByteString
@@ -580,7 +583,7 @@ mkSentryService dsn applyDefaults transport = case parseURI laxURIParserOptions 
   Right dsnUri -> do
     scopeRef <- newIORef blank
     let svc = SentryService
-              { svcDsn = dsnUri
+              { svcDsn = dsn
               , svcKey = fromMaybe (error "Secret key is mandatory") $
                          dsnUri ^? authorityL . _Just . authorityUserInfoL . _Just . uiUsernameL
               , svcSecret = dsnUri ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL

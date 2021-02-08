@@ -7,7 +7,7 @@
 module Sentry.HTTP where
 
 import Network.HTTP.Types
-import Network.HTTP.Client
+import Network.HTTP.Client as HTTP
 import Sentry.Types
 import Data.Aeson as Aeson
 import Debug.Trace
@@ -15,8 +15,6 @@ import GHC.Stack
 import URI.ByteString
 import qualified Data.ByteString as BS
 import Safe (fromJustNote)
-import Network.HTTP.Client as HTTP ( Manager, defaultRequest, Request, method, host, port
-                                   , path, queryString, requestHeaders, checkResponse, throwErrorStatusCodes)
 import Network.HTTP.Client.TLS (getGlobalManager)
 import URI.ByteString
 import Lens.Micro
@@ -27,6 +25,7 @@ import Data.Maybe
 import Data.String.Conv
 import Control.Concurrent (forkIO)
 import Control.Monad (void)
+import Data.String.Conv (toS)
 
 -- data HttpConfig = HttpConfig
 --   { cfgManager :: !Manager
@@ -47,8 +46,8 @@ mkHttpTransport :: (HasCallStack, Exception e)
                 -> Manager
                 -> (Event -> e -> IO ())
                 -> SentryService
-                -> (Event -> IO ())
-mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} =
+                -> IO (Event -> IO ())
+mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} = do
   let authComponents = [ ("sentry_version", "7")
                        , ("sentry_client", "better_haskell_raven/1.0")
                        -- TODO: send the timestamp, or not?
@@ -58,28 +57,24 @@ mkHttpTransport asyncFlag mgr fallbackTransport SentryService{..} =
       authString = BS.intercalate ", " $
                    DL.map (\(k, v) -> k <> "=" <> v) authComponents
       -- secret = cfgDsn ^? authorityL . _Just . authorityUserInfoL . _Just . uiPasswordL
-      baseReq = HTTP.defaultRequest
-                { method = "POST"
-                , host = maybe "" toS (svcDsn ^? authorityL . _Just . authorityHostL . hostBSL)
-                , port = fromMaybe 80 (svcDsn ^? authorityL . _Just . authorityPortL . _Just . portNumberL)
-                , path = "/api/" <> svcProjectId <> "/store/"
-                -- TODO: handle query-string
-                -- , queryString = baseUrl ^. queryL
-                , requestHeaders = [ (hContentType, "application/json")
-                                   , (hAccept, "application/json")
-                                   , ("X-Sentry-Auth", "Sentry " <> authString)
-                                   ]
-                , checkResponse = throwErrorStatusCodes
-                }
+
+  r <- HTTP.parseRequest $ toS svcDsn
+  let baseReq = r { path = "/api/" <> svcProjectId <> "/store/"
+                  , requestHeaders = [ (hContentType, "application/json")
+                                     , (hAccept, "application/json")
+                                     , ("X-Sentry-Auth", "Sentry " <> authString)
+                                     ]
+                  , checkResponse = throwErrorStatusCodes
+                  }
       -- TODO: Handle rate-limiting?
       transport evt = (flip catch) (fallbackTransport evt) $ do
         let req = baseReq { requestBody = RequestBodyLBS (Aeson.encode evt) }
         (fmap (Aeson.eitherDecode . responseBody) $ httpLbs req mgr) >>= \case
           Left e -> throwString e
           Right (r :: Aeson.Value) -> pure ()
-  in if asyncFlag
-     then void . forkIO . transport
-     else transport
+  case asyncFlag of
+    True -> pure $ void . forkIO . transport
+    False -> pure transport
 
 -- store :: (HasCallStack)
 --       => SentryConfig
