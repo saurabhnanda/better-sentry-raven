@@ -3,16 +3,16 @@
 set -e
 
 THREADS=8
-CONCURRENCY="8 16"
+CONCURRENCY="16"
 
 
-trap 'say "COMPLETED COMPLETED COMPLETED" && kill $(jobs -p)' EXIT
+trap 'kill $(jobs -p)' EXIT
 
 #  servant-beam servant-sentry-beam servant-psql-simple servant-sentry-psql-simple
 
 for c in $CONCURRENCY; do
     for path in plaintext json db fortunes; do
-        for p in servant servant-sentry; do
+        for p in servant-psql-simple servant-sentry-psql-simple; do
             sleep 5
             $p &
             PROG_PID=$!
