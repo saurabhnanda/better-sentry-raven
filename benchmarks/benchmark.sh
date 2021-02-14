@@ -2,8 +2,8 @@
 
 set -e
 
-THREADS=8
-CONCURRENCY="16"
+THREADS=1
+CONCURRENCY="1"
 
 
 trap 'kill $(jobs -p)' EXIT
