@@ -59,7 +59,7 @@ import qualified Network.Wai as Wai
 import qualified Data.Vault.Lazy as Vault
 -- import qualified Data.UUID                        as UUID (toASCIIBytes)
 -- import qualified Data.UUID.V4                     as UUID (nextRandom)
-import qualified System.UUID.V4 as UUID
+import qualified System.UUID.V1 as UUID
 import qualified Data.UUID as UUID
 import Network.HTTP.Client.TLS (getGlobalManager)
 import Network.HTTP.Client (Manager)
