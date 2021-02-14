@@ -1,1 +1,1 @@
-test_name,rps,latency_min,latency_max,latency_mean,latency_stdev,latency_50p,latency_90p,latency_99p,duration,requests,bytes
+test_name,rps,latency_min,latency_max,latency_mean,latency_stdev,latency_50p,latency_90p,latency_99p,duration,requests,bytes,errors
