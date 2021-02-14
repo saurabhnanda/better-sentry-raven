@@ -59,6 +59,7 @@ import qualified Data.Vault.Lazy as Vault
 import qualified Data.UUID                        as UUID (toASCIIBytes)
 import qualified Data.UUID.V4                     as UUID (nextRandom)
 import Network.HTTP.Client.TLS (getGlobalManager)
+import Network.HTTP.Client (Manager)
 import qualified Data.ByteString.Char8 as C8
 import Control.Exception (SomeException)
 #endif
@@ -93,9 +94,9 @@ app = genericServe . serverRoutes
 
 #ifdef SENTRY
 mkSentryMiddleWare :: Vault.Key (Sentry.SentryService, C8.ByteString)
-                   -> IO Wai.Middleware
-mkSentryMiddleWare instrKey = do
-  mgr <- getGlobalManager
+                   -> Manager
+                   -> Wai.Middleware
+mkSentryMiddleWare instrKey mgr nextApp req respond = do
   reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
   let evtDefaults evt = evt{ Sentry.evtLogger = Just "some-logger"
                            , Sentry.evtEnvironment = Just "test"
@@ -103,10 +104,9 @@ mkSentryMiddleWare instrKey = do
                            }
   sentrySvc <- Sentry.mkSentryService "https://whatever@end4z5bumpvo7.x.pipedream.net/999999" evtDefaults $
                Sentry.mkHttpTransport True mgr fallbackTransport
-  pure $ \nextApp req respond ->
-    let newReq = req { Wai.vault = Vault.insert instrKey (sentrySvc, reqId) (Wai.vault req) }
-        addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
-    in nextApp newReq (respond . addLogIdHeader)
+  let newReq = req { Wai.vault = Vault.insert instrKey (sentrySvc, reqId) (Wai.vault req) }
+      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
+  nextApp newReq (respond . addLogIdHeader)
   where
     fallbackTransport :: Sentry.Event -> SomeException -> IO ()
     fallbackTransport _ _ = pure ()
@@ -116,7 +116,8 @@ main _cap = do
   putStrLn "Servant is ready to serve you"
   baseApp <- mkApp _cap
   instrKey <- Vault.newKey
-  sentryMiddleware <- mkSentryMiddleWare instrKey
+  mgr <- getGlobalManager
+  let sentryMiddleware = mkSentryMiddleWare instrKey mgr
   Warp.run 7041 $ sentryMiddleware baseApp
 
 #else

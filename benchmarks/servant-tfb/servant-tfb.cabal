@@ -61,6 +61,7 @@ executable servant-sentry
   main-is:       Main.hs
   build-depends: better-sentry-raven
                , http-client-tls
+               , http-client
                , uuid
                , vault
                , wai
@@ -77,6 +78,7 @@ executable servant-sentry-beam
                , beam-postgres  
                , better-sentry-raven
                , http-client-tls
+               , http-client
                , uuid
                , vault
                , wai
@@ -89,6 +91,7 @@ executable servant-sentry-psql-simple
   cpp-options:   -DDB_PSQL_SIMPLE -DSENTRY
   build-depends: better-sentry-raven
                , http-client-tls
+               , http-client
                , uuid
                , vault
                , wai
