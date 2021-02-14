@@ -21,6 +21,7 @@ for c in $CONCURRENCY; do
             TEST_NAME="$p-$path-$c" ./wrk/wrk -c $c -t $THREADS --latency -d 20 -s benchmark.lua http://localhost:7041/$path
             kill -9 $PROG_PID
             echo "$p killed (PID=$PROG_PID)"
+            PGPASSWD="benchmarkdbpass" psql -U benchmarkdbuser -h tfb-database -c 'vacuum full "Fortune"; vacuum full "World"; vacuum full fortune; vacuum full world;'
             echo "---------------"
         done
         echo "================="
