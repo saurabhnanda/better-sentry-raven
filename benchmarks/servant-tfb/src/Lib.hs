@@ -93,23 +93,32 @@ app = genericServe . serverRoutes
 
 
 #ifdef SENTRY
+fallbackTransport :: Sentry.Event -> SomeException -> IO ()
+fallbackTransport _ _ = pure ()
+
+httpTransport :: Manager -> Sentry.SentryService -> Sentry.Event -> IO ()
+httpTransport mgr = Sentry.mkHttpTransport True mgr fallbackTransport
+
+sentryServiceMaker :: Manager
+                   -> C8.ByteString
+                   -> IO Sentry.SentryService
+sentryServiceMaker mgr reqId =
+  let fn evt = evt{ Sentry.evtLogger = Just "some-logger"
+                  , Sentry.evtEnvironment = Just "test"
+                  , Sentry.evtTags = [("request_id", C8.unpack reqId)]
+                  }
+      transport = httpTransport mgr
+  in Sentry.mkSentryService "https://whatever@end4z5bumpvo7.x.pipedream.net/999999" fn transport
+
 mkSentryMiddleWare :: Vault.Key (Sentry.SentryService, C8.ByteString)
                    -> Manager
                    -> Wai.Middleware
 mkSentryMiddleWare instrKey mgr nextApp req respond = do
   reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
-  let evtDefaults evt = evt{ Sentry.evtLogger = Just "some-logger"
-                           , Sentry.evtEnvironment = Just "test"
-                           , Sentry.evtTags = [("request_id", C8.unpack reqId)]
-                           }
-  sentrySvc <- Sentry.mkSentryService "https://whatever@end4z5bumpvo7.x.pipedream.net/999999" evtDefaults $
-               Sentry.mkHttpTransport True mgr fallbackTransport
+  sentrySvc <- sentryServiceMaker mgr reqId
   let newReq = req { Wai.vault = Vault.insert instrKey (sentrySvc, reqId) (Wai.vault req) }
       addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
   nextApp newReq (respond . addLogIdHeader)
-  where
-    fallbackTransport :: Sentry.Event -> SomeException -> IO ()
-    fallbackTransport _ _ = pure ()
 
 main :: Int -> IO ()
 main _cap = do
