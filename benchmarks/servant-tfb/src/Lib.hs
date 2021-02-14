@@ -108,9 +108,10 @@ mkSentryService mgr =
 
 mkSentryMiddleWare :: Vault.Key Sentry.SentryService
                    -> Sentry.SentryService
+                   -> C8.ByteString
                    -> Wai.Middleware
-mkSentryMiddleWare instrKey svc nextApp req respond = do
-  reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
+mkSentryMiddleWare instrKey svc reqId nextApp req respond = do
+  -- reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
   scopeRef <- newIORef $ Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", C8.unpack reqId) ] }
   let newSvc = svc { Sentry.svcScopeRef = scopeRef }
       newReq = req { Wai.vault = Vault.insert instrKey newSvc (Wai.vault req) }
@@ -123,8 +124,9 @@ main _cap = do
   baseApp <- mkApp _cap
   instrKey <- Vault.newKey
   mgr <- getGlobalManager
+  reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
   svc <- mkSentryService mgr
-  let sentryMiddleware = mkSentryMiddleWare instrKey svc
+  let sentryMiddleware = mkSentryMiddleWare instrKey svc reqId
   Warp.run 7041 $ sentryMiddleware baseApp
 
 #else
