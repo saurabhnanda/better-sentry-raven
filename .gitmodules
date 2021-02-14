@@ -1,0 +1,3 @@
+[submodule "benchmarks/wrk"]
+	path = benchmarks/wrk
+	url = https://github.com/wg/wrk.git
