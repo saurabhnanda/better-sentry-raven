@@ -62,7 +62,7 @@ executable servant-sentry
   build-depends: better-sentry-raven
                , http-client-tls
                , http-client
-               , uuid
+               , system-uuid
                , vault
                , wai
                , bytestring
@@ -79,7 +79,7 @@ executable servant-sentry-beam
                , better-sentry-raven
                , http-client-tls
                , http-client
-               , uuid
+               , system-uuid
                , vault
                , wai
                , bytestring
@@ -92,7 +92,7 @@ executable servant-sentry-psql-simple
   build-depends: better-sentry-raven
                , http-client-tls
                , http-client
-               , uuid
+               , system-uuid
                , vault
                , wai
                , bytestring

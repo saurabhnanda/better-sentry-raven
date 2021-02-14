@@ -57,8 +57,10 @@ import qualified Sentry.HTTP as Sentry
 import qualified Sentry.Blank as Sentry (blank)
 import qualified Network.Wai as Wai
 import qualified Data.Vault.Lazy as Vault
-import qualified Data.UUID                        as UUID (toASCIIBytes)
-import qualified Data.UUID.V4                     as UUID (nextRandom)
+-- import qualified Data.UUID                        as UUID (toASCIIBytes)
+-- import qualified Data.UUID.V4                     as UUID (nextRandom)
+import qualified System.UUID.V4 as UUID
+import qualified Data.UUID as UUID
 import Network.HTTP.Client.TLS (getGlobalManager)
 import Network.HTTP.Client (Manager)
 import qualified Data.ByteString.Char8 as C8
@@ -108,14 +110,13 @@ mkSentryService mgr =
 
 mkSentryMiddleWare :: Vault.Key Sentry.SentryService
                    -> Sentry.SentryService
-                   -> C8.ByteString
                    -> Wai.Middleware
-mkSentryMiddleWare instrKey svc reqId nextApp req respond = do
-  -- reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
-  scopeRef <- newIORef $ Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", C8.unpack reqId) ] }
+mkSentryMiddleWare instrKey svc nextApp req respond = do
+  reqId <- show <$> UUID.uuid
+  scopeRef <- newIORef $ Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", reqId) ] }
   let newSvc = svc { Sentry.svcScopeRef = scopeRef }
       newReq = req { Wai.vault = Vault.insert instrKey newSvc (Wai.vault req) }
-      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
+      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", C8.pack reqId):respHeaders)
   nextApp newReq respond
 
 main :: Int -> IO ()
@@ -124,9 +125,8 @@ main _cap = do
   baseApp <- mkApp _cap
   instrKey <- Vault.newKey
   mgr <- getGlobalManager
-  reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
   svc <- mkSentryService mgr
-  let sentryMiddleware = mkSentryMiddleWare instrKey svc reqId
+  let sentryMiddleware = mkSentryMiddleWare instrKey svc
   Warp.run 7041 $ sentryMiddleware baseApp
 
 #else

@@ -48,6 +48,8 @@ extra-deps:
   - hashable-1.2.7.0@sha256:03b6836ca9cd3ad0e5a2f3cce989b001dd0e05f306a873db3196037adb30e0a4,5215
   - haskell-src-exts-1.21.1@sha256:11d18ec3f463185f81b7819376b532e3087f8192cffc629aac5c9eec88897b35,4541
   - vector-sized-1.2.0.1@sha256:569160e163b6d85cd80ed3ae2f20a541ced210a721d12cb7eedcad395aefbb92,1670
+  - system-uuid-2.1.1@sha256:696b51b30979eea14194c9c3fc1d54b9b1a6c26a44fc3231608673a4967e46e4,2887
+
 # Override default flag values for local packages and extra-deps
 # flags: {}
 

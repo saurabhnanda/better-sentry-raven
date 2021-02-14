@@ -46,6 +46,13 @@ packages:
       sha256: dab631ff9542ee31cfe77434e2bb4808238e554438706264063d4b7a558943fa
   original:
     hackage: vector-sized-1.2.0.1@sha256:569160e163b6d85cd80ed3ae2f20a541ced210a721d12cb7eedcad395aefbb92,1670
+- completed:
+    hackage: system-uuid-2.1.1@sha256:696b51b30979eea14194c9c3fc1d54b9b1a6c26a44fc3231608673a4967e46e4,2887
+    pantry-tree:
+      size: 790
+      sha256: a8e132869131c26cd0d1aac320b2af182b968d569417989c88ae5d09e7a1d5ef
+  original:
+    hackage: system-uuid-2.1.1@sha256:696b51b30979eea14194c9c3fc1d54b9b1a6c26a44fc3231608673a4967e46e4,2887
 snapshots:
 - completed:
     size: 524996
