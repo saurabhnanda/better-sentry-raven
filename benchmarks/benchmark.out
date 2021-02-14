@@ -1,0 +1,454 @@
+Started servant-tfb-beam in background (PID=36294)
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     3.72ms    2.86ms  64.73ms   96.54%
+    Req/Sec     2.30k   451.49     3.89k    85.12%
+  Latency Distribution
+     50%    3.15ms
+     75%    3.49ms
+     90%    4.58ms
+     99%   12.57ms
+  182964 requests in 10.02s, 29.66MB read
+Requests/sec:  18257.88
+Transfer/sec:      2.96MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     3.53ms    0.88ms  40.67ms   90.82%
+    Req/Sec     2.28k   516.24    14.48k    93.38%
+  Latency Distribution
+     50%    3.32ms
+     75%    3.73ms
+     90%    4.28ms
+     99%    6.30ms
+  181919 requests in 10.10s, 32.96MB read
+Requests/sec:  18006.62
+Transfer/sec:      3.26MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    43.96ms   39.97ms 542.39ms   95.81%
+    Req/Sec   207.63     47.10   500.00     79.87%
+  Latency Distribution
+     50%   37.17ms
+     75%   42.64ms
+     90%   49.01ms
+     99%  264.60ms
+  16327 requests in 10.07s, 3.02MB read
+Requests/sec:   1621.13
+Transfer/sec:    306.78KB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    47.26ms    9.76ms 119.19ms   83.83%
+    Req/Sec   169.52     35.14   242.00     72.12%
+  Latency Distribution
+     50%   44.40ms
+     75%   49.57ms
+     90%   58.27ms
+     99%   91.09ms
+  13596 requests in 10.08s, 17.92MB read
+Requests/sec:   1349.22
+Transfer/sec:      1.78MB
+---------------
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     4.17ms    9.14ms 120.27ms   94.62%
+    Req/Sec     1.76k   750.05     2.79k    56.38%
+  Latency Distribution
+     50%    1.77ms
+     75%    2.60ms
+     90%    6.16ms
+     99%   53.05ms
+  140665 requests in 10.07s, 22.81MB read
+Requests/sec:  13973.43
+Transfer/sec:      2.27MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.66ms  358.55us  11.96ms   83.61%
+    Req/Sec     2.42k   336.35     3.73k    73.88%
+  Latency Distribution
+     50%    1.55ms
+     75%    1.74ms
+     90%    2.14ms
+     99%    2.85ms
+  193646 requests in 10.10s, 35.09MB read
+Requests/sec:  19169.28
+Transfer/sec:      3.47MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    23.12ms   10.47ms 138.29ms   90.24%
+    Req/Sec   179.06     47.41   272.00     63.61%
+  Latency Distribution
+     50%   19.88ms
+     75%   25.00ms
+     90%   32.53ms
+     99%   69.24ms
+  14314 requests in 10.06s, 2.65MB read
+Requests/sec:   1422.87
+Transfer/sec:    269.26KB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    26.40ms    8.16ms 112.71ms   88.77%
+    Req/Sec   153.38     32.15   230.00     61.25%
+  Latency Distribution
+     50%   24.26ms
+     75%   28.51ms
+     90%   34.73ms
+     99%   64.07ms
+  12301 requests in 10.08s, 16.21MB read
+Requests/sec:   1220.61
+Transfer/sec:      1.61MB
+---------------
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.28ms    2.73ms  60.77ms   96.84%
+    Req/Sec     2.17k   624.84     3.27k    79.25%
+  Latency Distribution
+     50%  772.00us
+     75%    1.02ms
+     90%    1.49ms
+     99%   12.15ms
+  173100 requests in 10.01s, 28.06MB read
+Requests/sec:  17291.32
+Transfer/sec:      2.80MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   763.86us  186.37us   8.60ms   89.42%
+    Req/Sec     2.63k   255.06     2.95k    84.03%
+  Latency Distribution
+     50%  710.00us
+     75%  789.00us
+     90%    0.96ms
+     99%    1.19ms
+  211354 requests in 10.10s, 38.30MB read
+Requests/sec:  20923.99
+Transfer/sec:      3.79MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     9.41ms    3.11ms  57.78ms   92.86%
+    Req/Sec   216.75     33.62   280.00     74.50%
+  Latency Distribution
+     50%    8.80ms
+     75%    9.70ms
+     90%   11.38ms
+     99%   22.99ms
+  17305 requests in 10.03s, 3.20MB read
+Requests/sec:   1725.36
+Transfer/sec:    326.49KB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    12.87ms    6.29ms 113.43ms   93.91%
+    Req/Sec   161.63     34.12   232.00     75.12%
+  Latency Distribution
+     50%   11.42ms
+     75%   13.12ms
+     90%   16.30ms
+     99%   40.68ms
+  12922 requests in 10.04s, 17.03MB read
+Requests/sec:   1286.83
+Transfer/sec:      1.70MB
+---------------
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.76ms    7.30ms 102.69ms   93.71%
+    Req/Sec     1.09k   561.57     2.41k    63.13%
+  Latency Distribution
+     50%  634.00us
+     75%    1.47ms
+     90%    5.55ms
+     99%   39.51ms
+  86780 requests in 10.10s, 14.07MB read
+Requests/sec:   8594.56
+Transfer/sec:      1.39MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.07ms    4.57ms  67.58ms   92.84%
+    Req/Sec     1.14k   621.70     2.72k    63.38%
+  Latency Distribution
+     50%  613.00us
+     75%    1.33ms
+     90%    4.79ms
+     99%   24.18ms
+  91224 requests in 10.03s, 16.53MB read
+Requests/sec:   9095.36
+Transfer/sec:      1.65MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     5.78ms    4.69ms  74.43ms   94.37%
+    Req/Sec   191.58     43.24   313.00     70.62%
+  Latency Distribution
+     50%    4.64ms
+     75%    5.91ms
+     90%    8.27ms
+     99%   29.07ms
+  15296 requests in 10.03s, 2.83MB read
+Requests/sec:   1525.57
+Transfer/sec:    288.69KB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     6.88ms    5.33ms  99.74ms   94.34%
+    Req/Sec   159.23     36.93   220.00     66.12%
+  Latency Distribution
+     50%    5.61ms
+     75%    6.67ms
+     90%    9.14ms
+     99%   29.84ms
+  12725 requests in 10.04s, 16.77MB read
+Requests/sec:   1267.41
+Transfer/sec:      1.67MB
+---------------
+servant-tfb-beam killed (PID=36294)
+=================
+Started servant-tfb-psql-simple in background (PID=37043)
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     3.67ms    1.62ms  40.62ms   93.95%
+    Req/Sec     2.25k   445.85     3.24k    72.12%
+  Latency Distribution
+     50%    3.23ms
+     75%    3.92ms
+     90%    4.54ms
+     99%   11.26ms
+  179481 requests in 10.02s, 29.10MB read
+Requests/sec:  17913.94
+Transfer/sec:      2.90MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     3.77ms    1.76ms  46.03ms   94.60%
+    Req/Sec     2.19k   397.39     3.67k    78.25%
+  Latency Distribution
+     50%    3.31ms
+     75%    4.01ms
+     90%    4.65ms
+     99%   10.22ms
+  174666 requests in 10.02s, 31.65MB read
+Requests/sec:  17433.80
+Transfer/sec:      3.16MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    17.46ms   36.27ms 503.26ms   97.66%
+    Req/Sec   633.18    142.61     1.72k    75.83%
+  Latency Distribution
+     50%   11.81ms
+     75%   14.39ms
+     90%   18.30ms
+     99%  215.40ms
+  49933 requests in 10.06s, 9.23MB read
+Requests/sec:   4962.91
+Transfer/sec:      0.92MB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    17.80ms    5.27ms 146.71ms   93.01%
+    Req/Sec   456.33     61.82   752.00     75.34%
+  Latency Distribution
+     50%   16.80ms
+     75%   18.51ms
+     90%   21.42ms
+     99%   34.18ms
+  36401 requests in 10.03s, 47.98MB read
+Requests/sec:   3627.84
+Transfer/sec:      4.78MB
+---------------
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.99ms    1.67ms  42.80ms   96.30%
+    Req/Sec     2.16k   454.79     2.81k    62.50%
+  Latency Distribution
+     50%    1.64ms
+     75%    2.06ms
+     90%    2.56ms
+     99%    7.34ms
+  172198 requests in 10.01s, 27.92MB read
+Requests/sec:  17200.48
+Transfer/sec:      2.79MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.91ms    0.94ms  26.24ms   93.14%
+    Req/Sec     2.17k   448.40     2.83k    67.00%
+  Latency Distribution
+     50%    1.62ms
+     75%    2.08ms
+     90%    2.53ms
+     99%    5.55ms
+  173075 requests in 10.01s, 31.36MB read
+Requests/sec:  17284.99
+Transfer/sec:      3.13MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     6.58ms    4.48ms 116.88ms   95.63%
+    Req/Sec   637.24    123.54     0.94k    67.54%
+  Latency Distribution
+     50%    5.82ms
+     75%    7.14ms
+     90%    8.83ms
+     99%   17.17ms
+  50821 requests in 10.03s, 9.39MB read
+Requests/sec:   5067.52
+Transfer/sec:      0.94MB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 32 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     9.59ms    3.94ms  72.05ms   92.48%
+    Req/Sec   428.98     90.61   666.00     69.12%
+  Latency Distribution
+     50%    8.46ms
+     75%    9.97ms
+     90%   12.38ms
+     99%   25.83ms
+  34226 requests in 10.03s, 45.11MB read
+Requests/sec:   3412.42
+Transfer/sec:      4.50MB
+---------------
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.08ms    1.45ms  38.68ms   97.12%
+    Req/Sec     2.14k   478.68     2.77k    65.88%
+  Latency Distribution
+     50%  833.00us
+     75%    1.02ms
+     90%    1.33ms
+     99%    5.75ms
+  170414 requests in 10.01s, 27.63MB read
+Requests/sec:  17019.84
+Transfer/sec:      2.76MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.89ms  450.33us  13.75ms   94.08%
+    Req/Sec     2.32k   485.09     7.62k    88.15%
+  Latency Distribution
+     50%  784.00us
+     75%    0.98ms
+     90%    1.11ms
+     99%    2.50ms
+  185426 requests in 10.10s, 33.60MB read
+Requests/sec:  18356.64
+Transfer/sec:      3.33MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     3.24ms    2.35ms  58.55ms   94.29%
+    Req/Sec   662.32    132.10     1.00k    67.25%
+  Latency Distribution
+     50%    2.77ms
+     75%    3.34ms
+     90%    4.46ms
+     99%   12.75ms
+  52787 requests in 10.02s, 9.76MB read
+Requests/sec:   5270.52
+Transfer/sec:      0.97MB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 16 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     4.28ms    0.96ms  20.93ms   87.13%
+    Req/Sec   470.42     57.26   626.00     77.25%
+  Latency Distribution
+     50%    4.06ms
+     75%    4.57ms
+     90%    5.22ms
+     99%    8.07ms
+  37501 requests in 10.02s, 49.43MB read
+Requests/sec:   3742.44
+Transfer/sec:      4.93MB
+---------------
+Running 10s test @ http://localhost:7041/plaintext
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   422.62us  388.80us  12.75ms   97.65%
+    Req/Sec     2.52k   374.97     3.62k    81.02%
+  Latency Distribution
+     50%  351.00us
+     75%  425.00us
+     90%  504.00us
+     99%    1.37ms
+  201936 requests in 10.10s, 32.74MB read
+Requests/sec:  19992.90
+Transfer/sec:      3.24MB
+---------------
+Running 10s test @ http://localhost:7041/json
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   435.69us  316.78us  11.40ms   96.36%
+    Req/Sec     2.41k   436.78     2.87k    78.54%
+  Latency Distribution
+     50%  356.00us
+     75%  452.00us
+     90%  544.00us
+     99%    1.43ms
+  193464 requests in 10.10s, 35.06MB read
+Requests/sec:  19154.25
+Transfer/sec:      3.47MB
+---------------
+Running 10s test @ http://localhost:7041/db
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.63ms    2.61ms 107.36ms   97.48%
+    Req/Sec   708.34    130.41     0.99k    71.34%
+  Latency Distribution
+     50%    1.28ms
+     75%    1.59ms
+     90%    2.20ms
+     99%    7.72ms
+  56409 requests in 10.01s, 10.42MB read
+Requests/sec:   5634.20
+Transfer/sec:      1.04MB
+---------------
+Running 10s test @ http://localhost:7041/fortunes
+  8 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.27ms    1.34ms  31.86ms   94.56%
+    Req/Sec   464.97     83.93   595.00     78.88%
+  Latency Distribution
+     50%    1.97ms
+     75%    2.28ms
+     90%    2.90ms
+     99%    7.85ms
+  37065 requests in 10.02s, 48.85MB read
+Requests/sec:   3700.47
+Transfer/sec:      4.88MB
+---------------
+servant-tfb-psql-simple killed (PID=37043)
+=================
