@@ -13,16 +13,21 @@ trap 'kill $(jobs -p)' EXIT
 for c in $CONCURRENCY; do
     for path in plaintext json db fortunes; do
         for p in servant-psql-simple servant-sentry-psql-simple; do
-            sleep 5
-            $p &
-            PROG_PID=$!
-            echo "Started $p in background (PID=$PROG_PID)"
-            while ! nc -z localhost 7041; do echo "Waiting for port 7041 to come up..." && sleep 1; done
-            TEST_NAME="$p-$path-$c" ./wrk/wrk -c $c -t $THREADS --latency -d 20 -s benchmark.lua http://localhost:7041/$path
-            kill -9 $PROG_PID
-            echo "$p killed (PID=$PROG_PID)"
-            PGPASSWD="benchmarkdbpass" psql -U benchmarkdbuser -h tfb-database -c 'vacuum full "Fortune"; vacuum full "World"; vacuum full fortune; vacuum full world;'
-            echo "---------------"
+            for x in 1 2 3; do
+                sleep 5
+                $p &
+                PROG_PID=$!
+                echo "Started $p in background (PID=$PROG_PID)"
+                while ! nc -z localhost 7041; do echo "Waiting for port 7041 to come up..." && sleep 1; done
+                TEST_NAME="$p-$path-$c" ./wrk/wrk -c $c -t $THREADS --latency -d 60 -s benchmark.lua http://localhost:7041/$path
+                kill -9 $PROG_PID
+                echo "$p killed (PID=$PROG_PID)"
+                PGPASSWORD="benchmarkdbpass" psql -U benchmarkdbuser -h tfb-database hello_world -c 'vacuum full "Fortune";'
+                PGPASSWORD="benchmarkdbpass" psql -U benchmarkdbuser -h tfb-database hello_world -c 'vacuum full "World";'
+                PGPASSWORD="benchmarkdbpass" psql -U benchmarkdbuser -h tfb-database hello_world -c 'vacuum full fortune;'
+                PGPASSWORD="benchmarkdbpass" psql -U benchmarkdbuser -h tfb-database hello_world -c 'vacuum full world;'
+                echo "---------------"
+            done
         done
         echo "================="
     done
