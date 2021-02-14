@@ -115,9 +115,9 @@ main :: Int -> IO ()
 main _cap = do
   putStrLn "Servant is ready to serve you"
   baseApp <- mkApp _cap
-  -- instrKey <- Vault.newKey
-  -- let sentryMiddleware = mkSentryMiddleWare instrKey
-  Warp.run 7041 baseApp
+  instrKey <- Vault.newKey
+  let sentryMiddleware = mkSentryMiddleWare instrKey
+  Warp.run 7041 $ sentryMiddleware baseApp
 
 #else
 
