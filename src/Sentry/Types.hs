@@ -573,6 +573,7 @@ stderrTransport evt = do
   BSL.hPutStr stderr $ (Aeson.encode evt) <> "\n"
   pure Nothing
 
+{-# INLINE mkSentryService #-}
 mkSentryService :: HasCallStack
                 => BS.ByteString
                 -> (Event -> Event)

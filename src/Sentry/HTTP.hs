@@ -41,6 +41,7 @@ import Data.String.Conv (toS)
 --   pure $ overrideFn HttpConfig{..}
 
 
+{-# INLINE mkHttpTransport #-}
 mkHttpTransport :: (HasCallStack, Exception e)
                 => Bool
                 -> Manager
