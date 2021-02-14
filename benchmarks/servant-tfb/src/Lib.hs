@@ -93,40 +93,30 @@ app = genericServe . serverRoutes
 
 
 #ifdef SENTRY
-fallbackTransport :: Sentry.Event -> SomeException -> IO ()
-fallbackTransport _ _ = pure ()
-
-httpTransport :: Manager -> Sentry.SentryService -> Sentry.Event -> IO ()
-httpTransport mgr = Sentry.mkHttpTransport True mgr fallbackTransport
-
-sentryServiceMaker :: Manager
-                   -> C8.ByteString
-                   -> IO Sentry.SentryService
-sentryServiceMaker mgr reqId =
-  let fn evt = evt{ Sentry.evtLogger = Just "some-logger"
-                  , Sentry.evtEnvironment = Just "test"
-                  , Sentry.evtTags = [("request_id", C8.unpack reqId)]
-                  }
-      transport = httpTransport mgr
-  in Sentry.mkSentryService "https://whatever@end4z5bumpvo7.x.pipedream.net/999999" fn transport
-
-mkSentryMiddleWare :: Vault.Key (Sentry.SentryService, C8.ByteString)
-                   -> Manager
+mkSentryMiddleWare :: Vault.Key Sentry.SentryService
                    -> Wai.Middleware
-mkSentryMiddleWare instrKey mgr nextApp req respond = do
-  reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
-  sentrySvc <- sentryServiceMaker mgr reqId
-  let newReq = req { Wai.vault = Vault.insert instrKey (sentrySvc, reqId) (Wai.vault req) }
-      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
-  nextApp newReq (respond . addLogIdHeader)
+mkSentryMiddleWare instrKey nextApp req respond = do
+  mgr <- getGlobalManager
+  -- reqId <- UUID.toASCIIBytes <$> UUID.nextRandom
+  let evtDefaults evt = evt{ Sentry.evtLogger = Just "some-logger"
+                           , Sentry.evtEnvironment = Just "test"
+                           --, Sentry.evtTags = [("request_id", C8.unpack reqId)]
+                           }
+  sentrySvc <- Sentry.mkSentryService "https://whatever@end4z5bumpvo7.x.pipedream.net/999999" evtDefaults $
+               Sentry.mkHttpTransport True mgr fallbackTransport
+  let newReq = req { Wai.vault = Vault.insert instrKey sentrySvc (Wai.vault req) }
+      --addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
+  nextApp newReq respond
+  where
+    fallbackTransport :: Sentry.Event -> SomeException -> IO ()
+    fallbackTransport _ _ = pure ()
 
 main :: Int -> IO ()
 main _cap = do
   putStrLn "Servant is ready to serve you"
   baseApp <- mkApp _cap
   instrKey <- Vault.newKey
-  mgr <- getGlobalManager
-  let sentryMiddleware = mkSentryMiddleWare instrKey mgr
+  let sentryMiddleware = mkSentryMiddleWare instrKey
   Warp.run 7041 $ sentryMiddleware baseApp
 
 #else
