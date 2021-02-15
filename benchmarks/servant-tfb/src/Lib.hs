@@ -117,7 +117,7 @@ mkSentryMiddleWare instrKey svc nextApp req respond = do
   let newSvc = svc { Sentry.svcScopeRef = scopeRef }
       newReq = req { Wai.vault = Vault.insert instrKey newSvc (Wai.vault req) }
       addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", C8.pack reqId):respHeaders)
-  nextApp newReq respond
+  nextApp newReq (respond . addLogIdHeader)
 
 main :: Int -> IO ()
 main _cap = do
