@@ -57,10 +57,10 @@ import qualified Sentry.HTTP as Sentry
 import qualified Sentry.Blank as Sentry (blank)
 import qualified Network.Wai as Wai
 import qualified Data.Vault.Lazy as Vault
--- import qualified Data.UUID                        as UUID (toASCIIBytes)
--- import qualified Data.UUID.V4                     as UUID (nextRandom)
-import qualified System.UUID.V1 as UUID
-import qualified Data.UUID as UUID
+import qualified Data.UUID                        as UUID (toASCIIBytes, toString)
+import qualified Data.UUID.V4                     as UUID (nextRandom)
+-- import qualified System.UUID.V1 as UUID
+-- import qualified Data.UUID as UUID
 import Network.HTTP.Client.TLS (getGlobalManager)
 import Network.HTTP.Client (Manager)
 import qualified Data.ByteString.Char8 as C8
@@ -112,11 +112,11 @@ mkSentryMiddleWare :: Vault.Key Sentry.SentryService
                    -> Sentry.SentryService
                    -> Wai.Middleware
 mkSentryMiddleWare instrKey svc nextApp req respond = do
-  reqId <- show <$> UUID.uuid
-  scopeRef <- newIORef $ Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", reqId) ] }
+  reqId <- UUID.nextRandom
+  scopeRef <- newIORef $ Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", UUID.toString reqId) ] }
   let newSvc = svc { Sentry.svcScopeRef = scopeRef }
       newReq = req { Wai.vault = Vault.insert instrKey newSvc (Wai.vault req) }
-      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", "hard-coded-bytestring"):respHeaders)
+      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", UUID.toASCIIBytes reqId):respHeaders)
   nextApp newReq (respond . addLogIdHeader)
 
 main :: Int -> IO ()
