@@ -113,7 +113,7 @@ mkSentryMiddleWare :: Vault.Key Sentry.SentryService
                    -> Wai.Middleware
 mkSentryMiddleWare instrKey svc nextApp req respond = do
   reqId <- UUID.nextRandom
-  scopeRef <- newIORef $ Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", UUID.toString reqId) ] }
+  scopeRef <- newIORef Sentry.blank -- { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", UUID.toString reqId) ] }
   let newSvc = svc { Sentry.svcScopeRef = scopeRef }
       newReq = req { Wai.vault = Vault.insert instrKey newSvc (Wai.vault req) }
       addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", UUID.toASCIIBytes reqId):respHeaders)
