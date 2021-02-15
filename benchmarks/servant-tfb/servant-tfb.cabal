@@ -66,6 +66,7 @@ executable servant-sentry
                , vault
                , wai
                , bytestring
+               , random
 
   cpp-options: -DSENTRY
 
@@ -83,6 +84,7 @@ executable servant-sentry-beam
                , vault
                , wai
                , bytestring
+               , random
 
 executable servant-sentry-psql-simple
   import:        db-deps
@@ -96,3 +98,4 @@ executable servant-sentry-psql-simple
                , vault
                , wai
                , bytestring
+               , random

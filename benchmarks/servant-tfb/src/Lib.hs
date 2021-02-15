@@ -57,13 +57,17 @@ import qualified Sentry.HTTP as Sentry
 import qualified Sentry.Blank as Sentry (blank)
 import qualified Network.Wai as Wai
 import qualified Data.Vault.Lazy as Vault
-import qualified Data.UUID                        as UUID (toASCIIBytes, toString)
-import qualified Data.UUID.V4                     as UUID (nextRandom)
+-- import qualified Data.UUID                        as UUID (toASCIIBytes, toString)
+-- import qualified Data.UUID.V4                     as UUID (nextRandom)
 -- import qualified System.UUID.V1 as UUID
 -- import qualified Data.UUID as UUID
+import qualified System.Random as R
+import Data.Bits ((.|.), (.&.))
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Builder as Builder
 import Network.HTTP.Client.TLS (getGlobalManager)
 import Network.HTTP.Client (Manager)
-import qualified Data.ByteString.Char8 as C8
 import Control.Exception (SomeException)
 import Data.IORef (newIORef)
 #endif
@@ -112,11 +116,13 @@ mkSentryMiddleWare :: Vault.Key Sentry.SentryService
                    -> Sentry.SentryService
                    -> Wai.Middleware
 mkSentryMiddleWare instrKey svc nextApp req respond = do
-  reqId <- UUID.nextRandom
-  scopeRef <- newIORef Sentry.blank -- { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", UUID.toString reqId) ] }
+  x <- fmap (\r -> (r .&. 0xffffffffffff00ff) .|. 0x0000000000004000) R.randomIO
+  y <- fmap (\r -> (r .&. 0x3fffffffffffffff) .|. 0x8000000000000000) R.randomIO
+  let reqId = BSL.toStrict $ Builder.toLazyByteString $ (Builder.word64HexFixed x) <> (Builder.word64HexFixed y)
+  scopeRef <- newIORef Sentry.blank { Sentry.scopeTags = Sentry.ScopeOpAdd [ ("request_id", C8.unpack reqId) ] }
   let newSvc = svc { Sentry.svcScopeRef = scopeRef }
       newReq = req { Wai.vault = Vault.insert instrKey newSvc (Wai.vault req) }
-      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", UUID.toASCIIBytes reqId):respHeaders)
+      addLogIdHeader = Wai.mapResponseHeaders (\respHeaders -> ("X-Request-Id", reqId):respHeaders)
   nextApp newReq (respond . addLogIdHeader)
 
 main :: Int -> IO ()
